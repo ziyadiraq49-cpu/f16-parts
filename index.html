@@ -460,7 +460,7 @@ tbody tr:last-child td{border-bottom:none;}
   <div class="entry-title">F-16 PARTS MGMT</div>
   <div class="entry-sub">IRAQI AIR FORCE — نظام إدارة القطع</div>
   <input type="password" class="entry-input" id="entryInput"
-    placeholder="XXXXXXX" maxlength="7"
+    placeholder="XXXXXXX" maxlength="7" disabled
     onkeydown="if(event.key==='Enter')checkEntryCode()"
     oninput="this.value=this.value.toUpperCase()">
   <button class="entry-btn" onclick="checkEntryCode()">🔓 دخول</button>
@@ -470,11 +470,36 @@ tbody tr:last-child td{border-bottom:none;}
 
 <script>
 var _appStarted = false;
-var _entryPass = 'HZ16TNB'; // القيمة الافتراضية — تُحدَّث من Firestore بعد الدخول
+var _entryPass  = 'HZ16TNB'; // افتراضي — يُحدَّث من Firestore قبل الدخول
+
+// ── تحميل كلمة السر من Firestore قبل السماح بالدخول ──
+(async function loadAppPass(){
+  try {
+    const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
+    const { getFirestore, getDoc, doc } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+    const cfg = {
+      apiKey:"AIzaSyCz08qwhHVD5CDXjQcDSLr4wMfdC5qLwHQ",
+      authDomain:"f16-parts.firebaseapp.com",
+      projectId:"f16-parts",
+      storageBucket:"f16-parts.firebasestorage.app",
+      messagingSenderId:"536524787461",
+      appId:"1:536524787461:web:c17c2e30ed88ca56b4b16c"
+    };
+    const app = getApps().length ? getApps()[0] : initializeApp(cfg);
+    const db  = getFirestore(app);
+    const snap = await getDoc(doc(db,'app_config','passwords'));
+    if(snap.exists() && snap.data().appPass){
+      _entryPass = snap.data().appPass.toUpperCase();
+    }
+  } catch(e){ console.warn('entry pass load:', e); }
+  // أظهر حقل الإدخال بعد التحميل
+  document.getElementById('entryInput').disabled = false;
+  document.getElementById('entryInput').focus();
+})();
+
 function checkEntryCode(){
   var val = document.getElementById('entryInput').value.trim().toUpperCase();
-  var expected = (typeof APP_PASS !== 'undefined' ? APP_PASS : _entryPass).toUpperCase();
-  if(val === expected){
+  if(val === _entryPass.toUpperCase()){
     document.getElementById('appEntryScreen').classList.add('hidden');
     document.getElementById('loadingScreen').classList.remove('hidden');
     if(window._startApp) window._startApp();
@@ -488,7 +513,6 @@ function checkEntryCode(){
     setTimeout(function(){ inp.style.animation=''; inp.focus(); }, 400);
   }
 }
-setTimeout(function(){ document.getElementById('entryInput').focus(); }, 300);
 </script>
 
 <!-- LOADING -->
@@ -1395,7 +1419,7 @@ function renderTable(mode, data, q){
     <td class="c-note" title="${esc(p.notes)}">${hl(p.notes,q)}</td>
     <td>${fileBadge(p)}</td>
     ${mode==='o'?`<td><div class="acts"><button class="btn-edit" onclick="openEdit('${p.id}')">✏️</button><button class="btn-del" onclick="deletePart('${p.id}')">🗑</button></div></td>`:''}
-    ${mode==='ag'?`<td><div class="acts"><button class="btn-edit" onclick="openEdit('${p.id}')">✏️ تعديل</button></div></td>`:''}
+    ${mode==='ag'?`<td><div class="acts"><button class="btn-edit" onclick="openEdit('${p.id}')">✏️</button><button class="btn-del" onclick="deletePart('${p.id}')">🗑</button></div></td>`:''}
   </tr>`).join('');
 }
 
@@ -1518,7 +1542,7 @@ window.savePart=async function(){
 };
 
 window.deletePart=async function(id){
-  if(!ownerOpen) return;
+  if(!ownerOpen&&!agentOpen) return;
   if(!confirm('حذف هذه القطعة وجميع ملفاتها؟')) return;
   try{ await deleteDoc(doc(DB,'parts',id)); toast('🗑 تم الحذف','info'); }
   catch(e){ toast('❌ فشل الحذف','error'); }
@@ -1751,8 +1775,7 @@ function renderMaint(){
     <td class="maint-note" title="${esc(r.note)}">${esc(r.note)}</td>
     <td><div class="acts">
       ${(ownerOpen||agentOpen)?`<button class="btn-edit" onclick="editMaint('${r.id}')">✏️</button>`:''}
-      ${ownerOpen?`<button class="btn-del" onclick="deleteMaint('${r.id}')">🗑</button>`:''}
-      ${(!ownerOpen&&!agentOpen)?'<span style="color:var(--muted);font-size:10px">—</span>':''}
+      ${(ownerOpen||agentOpen)?`<button class="btn-del" onclick="deleteMaint('${r.id}')">🗑</button>`:''}
     </div></td>
     <td><span class="maint-ac">${esc(r.ac)}</span></td>
   </tr>`).join('');
@@ -1846,7 +1869,7 @@ window.saveMaint=async function(){
   toast(maintEditId?'✅ تم تحديث السجل':'✅ تمت الإضافة','success');
 };
 window.deleteMaint=async function(id){
-  if(!ownerOpen){ toast('⚠️ الحذف للمالك فقط','error'); return; }
+  if(!ownerOpen&&!agentOpen){ toast('⚠️ يحتاج صلاحية وكيل أو مالك','error'); return; }
   if(!confirm('حذف هذا السجل؟')) return;
   maintRecords=maintRecords.filter(x=>x.id!==id);
   await saveMaintStore(); renderMaint();
@@ -2045,7 +2068,7 @@ function renderPod(){
         <td class="c-code">${esc(r.pnA314)}</td>
         <td><div class="acts">
           ${(ownerOpen||agentOpen)?`<button class="btn-edit" onclick="openPodEdit('${r.id}')">✏️</button>`:''}
-          ${ownerOpen?`<button class="btn-del" onclick="deletePod('${r.id}')">🗑</button>`:''}
+          ${(ownerOpen||agentOpen)?`<button class="btn-del" onclick="deletePod('${r.id}')">🗑</button>`:''}
         </div></td>
       </tr>`;
     }).join('');
@@ -2269,7 +2292,7 @@ window.savePod=async function(){
 };
 
 window.deletePod=async function(id){
-  if(!ownerOpen){ toast('⚠️ الحذف للمالك فقط','error'); return; }
+  if(!ownerOpen&&!agentOpen){ toast('⚠️ يحتاج صلاحية وكيل أو مالك','error'); return; }
   if(!confirm('حذف هذا السجل نهائياً؟')) return;
   podRecords=podRecords.filter(x=>x.id!==id);
   await savePodStore(); renderPod();
