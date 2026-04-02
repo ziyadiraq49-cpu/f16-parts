@@ -460,7 +460,7 @@ tbody tr:last-child td{border-bottom:none;}
   <div class="entry-title">F-16 PARTS MGMT</div>
   <div class="entry-sub">IRAQI AIR FORCE — نظام إدارة القطع</div>
   <input type="password" class="entry-input" id="entryInput"
-    placeholder="XXXXXXX" maxlength="7" disabled
+    placeholder="XXXXXXX" maxlength="7"
     onkeydown="if(event.key==='Enter')checkEntryCode()"
     oninput="this.value=this.value.toUpperCase()">
   <button class="entry-btn" onclick="checkEntryCode()">🔓 دخول</button>
@@ -470,32 +470,8 @@ tbody tr:last-child td{border-bottom:none;}
 
 <script>
 var _appStarted = false;
-var _entryPass  = 'HZ16TNB'; // افتراضي — يُحدَّث من Firestore قبل الدخول
-
-// ── تحميل كلمة السر من Firestore قبل السماح بالدخول ──
-(async function loadAppPass(){
-  try {
-    const { initializeApp, getApps } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js');
-    const { getFirestore, getDoc, doc } = await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
-    const cfg = {
-      apiKey:"AIzaSyCz08qwhHVD5CDXjQcDSLr4wMfdC5qLwHQ",
-      authDomain:"f16-parts.firebaseapp.com",
-      projectId:"f16-parts",
-      storageBucket:"f16-parts.firebasestorage.app",
-      messagingSenderId:"536524787461",
-      appId:"1:536524787461:web:c17c2e30ed88ca56b4b16c"
-    };
-    const app = getApps().length ? getApps()[0] : initializeApp(cfg);
-    const db  = getFirestore(app);
-    const snap = await getDoc(doc(db,'app_config','passwords'));
-    if(snap.exists() && snap.data().appPass){
-      _entryPass = snap.data().appPass.toUpperCase();
-    }
-  } catch(e){ console.warn('entry pass load:', e); }
-  // أظهر حقل الإدخال بعد التحميل
-  document.getElementById('entryInput').disabled = false;
-  document.getElementById('entryInput').focus();
-})();
+// كلمة السر الافتراضية — تُحدَّث من Firestore داخل startApp
+var _entryPass = 'HZ16TNB';
 
 function checkEntryCode(){
   var val = document.getElementById('entryInput').value.trim().toUpperCase();
@@ -513,6 +489,7 @@ function checkEntryCode(){
     setTimeout(function(){ inp.style.animation=''; inp.focus(); }, 400);
   }
 }
+setTimeout(function(){ document.getElementById('entryInput').focus(); }, 300);
 </script>
 
 <!-- LOADING -->
@@ -1596,7 +1573,7 @@ async function startApp(){
           const d=s.data();
           if(d.ownerPass) OWNER_PASS=d.ownerPass;
           if(d.agentPass) AGENT_PASS=d.agentPass;
-          if(d.appPass){ APP_PASS=d.appPass; _entryPass=d.appPass; }
+          if(d.appPass){ APP_PASS=d.appPass.toUpperCase(); _entryPass=APP_PASS; }
         }
       }catch(e){ console.warn('passwords load:',e); }
     })();
@@ -2349,6 +2326,7 @@ window.changeAppPass=async function(){
   if(!v||v.length<4){ toast('⚠️ 4 أحرف على الأقل','error'); return; }
   APP_PASS=v.toUpperCase();
   _entryPass=APP_PASS;
+  window._entryPass=APP_PASS;
   document.getElementById('newAppPass').value='';
   document.getElementById('strengthApp').style.width='0%';
   try{ await _savePasswords(); toast('✅ تم تغيير كلمة سر التطبيق وحُفِظت','success'); }
