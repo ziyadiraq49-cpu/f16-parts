@@ -1,0 +1,2360 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>نظام إدارة قطع غيار F-16</title>
+<link href="https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;600;700;900&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#030912;--panel:#070f1e;--card:#0b1628;--border:#1a3a6e;
+  --accent:#00c8ff;--accent2:#ff6b00;--green:#00ff88;
+  --red:#ff3366;--yellow:#ffd700;--text:#c8dff5;--muted:#4a6a8f;
+  --purple:#a855f7;--agent:#00c8ff;
+  --glow:0 0 20px rgba(0,200,255,0.3);--glow2:0 0 20px rgba(255,107,0,0.3);
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+body{background:var(--bg);color:var(--text);font-family:'Cairo',sans-serif;min-height:100vh;overflow-x:hidden;}
+body::before{content:'';position:fixed;inset:0;
+  background-image:linear-gradient(rgba(0,200,255,0.03) 1px,transparent 1px),linear-gradient(90deg,rgba(0,200,255,0.03) 1px,transparent 1px);
+  background-size:40px 40px;pointer-events:none;z-index:0;}
+
+/* LOADING */
+#loadingScreen{position:fixed;inset:0;background:var(--bg);z-index:9999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
+#loadingScreen.hidden{display:none;}
+.spinner{width:48px;height:48px;border:3px solid var(--border);border-top-color:var(--accent);border-radius:50%;animation:spin 0.8s linear infinite;}
+@keyframes spin{to{transform:rotate(360deg);}}
+.loading-label{font-family:'Orbitron',sans-serif;font-size:11px;color:var(--accent);letter-spacing:3px;}
+.loading-sub{font-size:12px;color:var(--muted);}
+
+/* TOAST */
+#toast{position:fixed;bottom:24px;left:50%;transform:translateX(-50%) translateY(100px);
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:12px 28px;font-size:13px;z-index:8000;
+  transition:transform 0.35s cubic-bezier(.34,1.56,.64,1);
+  display:flex;align-items:center;gap:10px;box-shadow:0 8px 32px rgba(0,0,0,0.6);min-width:220px;justify-content:center;}
+#toast.show{transform:translateX(-50%) translateY(0);}
+#toast.success{border-color:var(--green);color:var(--green);}
+#toast.error{border-color:var(--red);color:var(--red);}
+#toast.info{border-color:var(--accent);color:var(--accent);}
+
+/* SYNC BADGE */
+#syncBadge{position:fixed;top:108px;right:10px;z-index:500;background:var(--card);
+  border:1px solid var(--border);border-radius:6px;padding:5px 13px;font-size:10px;
+  font-family:'Orbitron',sans-serif;display:flex;align-items:center;gap:7px;color:var(--muted);transition:all 0.3s;}
+#syncBadge.live{border-color:var(--green);color:var(--green);}
+#syncBadge.syncing{border-color:var(--yellow);color:var(--yellow);}
+#syncBadge.err{border-color:var(--red);color:var(--red);}
+.sdot{width:6px;height:6px;border-radius:50%;background:currentColor;}
+.sdot.pulse{animation:blink 1s infinite;}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:0.15}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:0.3}}
+
+/* LOCK SCREENS */
+.lock-screen{position:fixed;inset:0;background:rgba(2,6,15,0.97);backdrop-filter:blur(6px);z-index:800;
+  display:flex;flex-direction:column;align-items:center;justify-content:center;gap:18px;}
+.lock-screen.hidden{display:none;}
+.lock-icon{font-size:54px;opacity:0.25;}
+.lock-title{font-family:'Orbitron',sans-serif;font-size:14px;letter-spacing:3px;}
+.lock-sub{font-size:13px;color:var(--muted);}
+.lock-input{background:var(--card);color:var(--text);
+  padding:12px 28px;border-radius:4px;font-family:'Cairo',sans-serif;font-size:15px;
+  outline:none;text-align:center;width:260px;letter-spacing:5px;border:1px solid;}
+.lock-err{color:var(--red);font-size:13px;display:none;}
+
+/* HEADER */
+.header{position:fixed;top:0;left:0;right:0;z-index:200;background:linear-gradient(180deg,#050d1f 0%,var(--bg) 100%);
+  border-bottom:1px solid var(--border);}
+.header::after{content:'';position:absolute;bottom:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:0.6;}
+.header-top{display:flex;align-items:center;justify-content:space-between;padding:8px 14px;height:52px;}
+.logo{display:flex;align-items:center;gap:10px;}
+.logo-icon{width:36px;height:36px;background:linear-gradient(135deg,var(--accent),#0070aa);
+  clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+  display:flex;align-items:center;justify-content:center;font-size:16px;}
+.logo-text{font-family:'Orbitron',sans-serif;font-size:12px;font-weight:700;color:var(--accent);letter-spacing:1px;text-shadow:var(--glow);}
+.logo-sub{font-size:9px;color:var(--muted);}
+.hdr-right{display:flex;align-items:center;gap:8px;font-size:9px;color:var(--muted);font-family:'Orbitron',sans-serif;}
+.live-dot{width:6px;height:6px;border-radius:50%;background:var(--green);box-shadow:0 0 6px var(--green);animation:pulse 2s infinite;}
+
+/* BOTTOM NAV */
+.nav-bottom{display:flex;border-top:1px solid var(--border);background:var(--panel);}
+.nav-tab{flex:1;padding:8px 4px 6px;background:transparent;border:none;border-top:2px solid transparent;
+  color:var(--muted);cursor:pointer;font-family:'Cairo',sans-serif;font-size:10px;font-weight:600;
+  display:flex;flex-direction:column;align-items:center;gap:2px;transition:all 0.25s;min-width:0;}
+.nav-tab .tab-icon{font-size:18px;line-height:1;}
+.nav-tab .tab-label{font-size:9px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%;}
+.nav-tab:hover{color:var(--accent);}
+.nav-tab.active{color:var(--accent);border-top-color:var(--accent);background:rgba(0,200,255,0.06);}
+.nav-tab.agent-tab.active{color:var(--accent);border-top-color:var(--accent);background:rgba(0,200,255,0.06);}
+.nav-tab.owner-tab.active{color:var(--accent2);border-top-color:var(--accent2);background:rgba(255,107,0,0.06);}
+
+/* offset for fixed header */
+.main{position:relative;z-index:1;padding:12px;padding-top:108px;max-width:1440px;margin:0 auto;}
+.page{display:none;}.page.active{display:block;}
+
+/* STATS */
+.stats-row{display:grid;grid-template-columns:repeat(2,1fr);gap:12px;margin-bottom:16px;}
+@media(min-width:600px){.stats-row{grid-template-columns:repeat(4,1fr);}}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px 16px;position:relative;overflow:hidden;}
+.stat-card::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;}
+.stat-card.blue::before{background:linear-gradient(90deg,transparent,var(--accent),transparent);}
+.stat-card.orange::before{background:linear-gradient(90deg,transparent,var(--accent2),transparent);}
+.stat-card.green::before{background:linear-gradient(90deg,transparent,var(--green),transparent);}
+.stat-card.yellow::before{background:linear-gradient(90deg,transparent,var(--yellow),transparent);}
+.stat-label{font-size:10px;color:var(--muted);letter-spacing:1px;margin-bottom:4px;}
+.stat-value{font-family:'Orbitron',sans-serif;font-size:24px;font-weight:700;}
+.stat-card.blue .stat-value{color:var(--accent);}
+.stat-card.orange .stat-value{color:var(--accent2);}
+.stat-card.green .stat-value{color:var(--green);}
+.stat-card.yellow .stat-value{color:var(--yellow);}
+.stat-sub{font-size:10px;color:var(--muted);margin-top:3px;}
+
+/* SEARCH */
+.search-panel{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:16px;margin-bottom:16px;}
+.sp-title{font-size:11px;letter-spacing:2px;font-family:'Orbitron',sans-serif;margin-bottom:12px;padding-bottom:8px;border-bottom:1px solid var(--border);}
+.sp-title.blue{color:var(--accent);}.sp-title.orange{color:var(--accent2);}
+.search-row{display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;}
+.sg{display:flex;flex-direction:column;gap:5px;flex:1;min-width:130px;}
+.sg label{font-size:10px;color:var(--muted);letter-spacing:1px;}
+.sg select,.sg input{background:var(--panel);border:1px solid var(--border);color:var(--text);
+  padding:9px 12px;border-radius:4px;font-family:'Cairo',sans-serif;font-size:13px;outline:none;
+  transition:border-color 0.3s;width:100%;}
+.sg select:focus,.sg input:focus{border-color:var(--accent);}
+.sg select option{background:var(--panel);}
+
+/* BUTTONS */
+.btn{padding:8px 14px;border:none;border-radius:4px;cursor:pointer;font-family:'Cairo',sans-serif;font-size:12px;font-weight:700;transition:all 0.3s;}
+.btn-primary{background:linear-gradient(135deg,var(--accent),#0070aa);color:#000;}
+.btn-primary:hover{box-shadow:var(--glow);}
+.btn-orange{background:linear-gradient(135deg,var(--accent2),#cc5500);color:#fff;}
+.btn-orange:hover{box-shadow:var(--glow2);}
+.btn-green{background:linear-gradient(135deg,var(--green),#009950);color:#000;}
+.btn-green:hover{box-shadow:0 0 16px rgba(0,255,136,0.3);}
+.btn-ghost{background:rgba(255,255,255,0.04);border:1px solid var(--border);color:var(--muted);
+  border-radius:4px;cursor:pointer;font-family:'Cairo',sans-serif;padding:8px 12px;font-size:12px;transition:all 0.3s;}
+.btn-ghost:hover{color:var(--text);border-color:var(--muted);}
+.btn-edit{background:rgba(0,200,255,0.1);border:1px solid var(--accent);color:var(--accent);
+  padding:5px 9px;font-size:11px;border-radius:4px;cursor:pointer;font-family:'Cairo',sans-serif;transition:all 0.3s;}
+.btn-del{background:rgba(255,51,102,0.1);border:1px solid var(--red);color:var(--red);
+  padding:5px 9px;font-size:11px;border-radius:4px;cursor:pointer;font-family:'Cairo',sans-serif;transition:all 0.3s;}
+
+/* TABLE */
+.table-wrap{background:var(--card);border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.table-head{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;
+  border-bottom:1px solid var(--border);background:var(--panel);}
+.table-title{font-family:'Orbitron',sans-serif;font-size:10px;letter-spacing:2px;}
+.table-title.blue{color:var(--accent);}.table-title.orange{color:var(--accent2);}
+.tbl-count{font-size:11px;color:var(--muted);background:var(--bg);padding:3px 10px;border-radius:20px;border:1px solid var(--border);}
+table{width:100%;border-collapse:collapse;}
+thead tr{background:rgba(0,200,255,0.04);}
+th{padding:10px 12px;text-align:right;font-size:10px;color:var(--accent);letter-spacing:1px;font-weight:700;
+  border-bottom:1px solid var(--border);font-family:'Orbitron',sans-serif;white-space:nowrap;}
+td{padding:9px 12px;font-size:12px;border-bottom:1px solid rgba(26,58,110,0.35);color:var(--text);vertical-align:middle;}
+tbody tr:hover{background:rgba(0,200,255,0.03);}
+tbody tr:last-child td{border-bottom:none;}
+.c-code{font-family:'Orbitron',sans-serif;font-size:10px;color:var(--accent);letter-spacing:1px;}
+.c-nsn{font-family:'Orbitron',sans-serif;font-size:10px;color:var(--yellow);}
+.c-seq{font-family:'Orbitron',sans-serif;font-size:10px;color:var(--muted);}
+.c-ac{display:inline-block;padding:2px 8px;border-radius:3px;font-size:10px;font-family:'Orbitron',sans-serif;
+  background:rgba(0,200,255,0.08);border:1px solid rgba(0,200,255,0.25);color:var(--accent);}
+.c-note{max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:11px;}
+.acts{display:flex;gap:4px;flex-wrap:wrap;}
+.empty{text-align:center;padding:40px;color:var(--muted);}
+.empty-icon{font-size:36px;opacity:0.3;margin-bottom:10px;}
+.hl{background:rgba(255,215,0,0.22);color:var(--yellow);border-radius:2px;padding:0 2px;}
+
+/* FILE BADGE */
+.file-badge{display:inline-flex;align-items:center;gap:4px;padding:3px 9px;border-radius:3px;font-size:10px;
+  background:rgba(168,85,247,0.1);border:1px solid rgba(168,85,247,0.3);color:var(--purple);cursor:pointer;transition:all 0.2s;}
+.file-badge:hover{background:rgba(168,85,247,0.2);}
+.file-count{background:var(--purple);color:#fff;border-radius:10px;padding:0 5px;font-size:10px;}
+
+/* ROLE BARS */
+.role-bar{border-radius:8px;padding:10px 14px;margin-bottom:14px;display:flex;align-items:center;
+  justify-content:space-between;flex-wrap:wrap;gap:8px;}
+.role-bar.owner{background:rgba(255,107,0,0.07);border:1px solid rgba(255,107,0,0.28);}
+.role-bar.agent{background:rgba(0,200,255,0.07);border:1px solid rgba(0,200,255,0.28);}
+.role-badge{display:flex;align-items:center;gap:6px;font-weight:700;font-size:12px;flex:1;min-width:0;}
+.role-bar.owner .role-badge{color:var(--accent2);}
+.role-bar.agent .role-badge{color:var(--accent);}
+.role-acts{display:flex;gap:6px;align-items:center;flex-wrap:wrap;}
+
+/* MODAL */
+.modal-ov{position:fixed;inset:0;background:rgba(0,0,0,0.9);backdrop-filter:blur(4px);z-index:1000;display:none;align-items:center;justify-content:center;padding:16px;}
+.modal-ov.open{display:flex;}
+.modal{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:22px;
+  width:100%;max-width:680px;max-height:94vh;overflow-y:auto;position:relative;
+  box-shadow:0 0 60px rgba(0,0,0,0.8);}
+.modal::before{content:'';position:absolute;top:0;left:0;right:0;height:2px;background:linear-gradient(90deg,transparent,var(--accent2),transparent);}
+.modal-title{font-family:'Orbitron',sans-serif;font-size:12px;color:var(--accent2);letter-spacing:2px;
+  margin-bottom:18px;padding-bottom:12px;border-bottom:1px solid var(--border);}
+.form-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px;}
+@media(max-width:480px){.form-grid{grid-template-columns:1fr;}}
+.fg{display:flex;flex-direction:column;gap:5px;}
+.fg.full{grid-column:1/-1;}
+.fg label{font-size:10px;color:var(--muted);letter-spacing:1px;}
+.fg input,.fg textarea,.fg select{background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:10px 12px;border-radius:4px;font-family:'Cairo',sans-serif;font-size:13px;outline:none;
+  transition:border-color 0.3s;width:100%;}
+.fg textarea{resize:vertical;min-height:70px;}
+.fg input:focus,.fg textarea:focus,.fg select:focus{border-color:var(--accent2);}
+.modal-acts{display:flex;gap:10px;justify-content:flex-end;padding-top:14px;border-top:1px solid var(--border);margin-top:8px;flex-wrap:wrap;}
+.btn-cancel{background:transparent;border:1px solid var(--border);color:var(--muted);padding:9px 18px;
+  border-radius:4px;cursor:pointer;font-family:'Cairo',sans-serif;font-size:13px;transition:all 0.3s;}
+.btn-cancel:hover{border-color:var(--red);color:var(--red);}
+
+/* UPLOAD */
+.upload-section{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:14px;margin-bottom:4px;}
+.upload-title{font-size:10px;color:var(--purple);letter-spacing:1.5px;font-family:'Orbitron',sans-serif;
+  margin-bottom:12px;display:flex;align-items:center;justify-content:space-between;}
+.drop-zone{border:2px dashed rgba(168,85,247,0.4);border-radius:8px;padding:20px 16px;text-align:center;
+  transition:all 0.3s;background:rgba(168,85,247,0.02);}
+.drop-zone.drag-over{border-color:var(--purple);background:rgba(168,85,247,0.1);}
+.drop-icon{font-size:28px;margin-bottom:8px;opacity:0.4;}
+.drop-text{font-size:12px;color:var(--muted);margin-bottom:12px;}
+.file-pick-label{display:inline-flex;align-items:center;gap:8px;padding:10px 22px;
+  background:linear-gradient(135deg,rgba(168,85,247,0.25),rgba(168,85,247,0.1));
+  border:1px solid var(--purple);color:var(--purple);border-radius:6px;cursor:pointer;
+  font-family:'Cairo',sans-serif;font-size:14px;font-weight:700;transition:all 0.3s;}
+.file-pick-label:hover{background:rgba(168,85,247,0.35);box-shadow:0 0 16px rgba(168,85,247,0.3);}
+.file-pick-label input[type=file]{display:none;}
+.drop-types{font-size:10px;color:var(--muted);margin-top:10px;line-height:1.9;opacity:0.8;}
+.file-list{margin-top:12px;display:flex;flex-direction:column;gap:7px;}
+.file-item{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);
+  border-radius:6px;padding:8px 10px;transition:all 0.2s;}
+.file-item:hover{border-color:var(--purple);}
+.file-icon-lg{font-size:20px;flex-shrink:0;}
+.file-info{flex:1;min-width:0;}
+.file-name{font-size:11px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;font-weight:600;}
+.file-meta{font-size:10px;color:var(--muted);margin-top:2px;}
+.file-thumb{width:40px;height:40px;object-fit:cover;border-radius:4px;border:1px solid var(--border);flex-shrink:0;}
+.file-actions{display:flex;gap:5px;flex-shrink:0;}
+.fa-btn{background:none;border:none;cursor:pointer;font-size:15px;padding:3px 6px;border-radius:4px;transition:all 0.2s;}
+.fa-btn.view:hover{background:rgba(0,200,255,0.15);}
+.fa-btn.rm:hover{background:rgba(255,51,102,0.15);}
+.fa-btn.dl:hover{background:rgba(0,255,136,0.15);}
+.upload-prog{height:3px;background:var(--border);border-radius:2px;margin-top:8px;overflow:hidden;display:none;}
+.upload-prog-bar{height:100%;background:linear-gradient(90deg,var(--purple),var(--accent));transition:width 0.4s;width:0%;}
+
+/* FILES MODAL */
+#filesModal .modal::before{background:linear-gradient(90deg,transparent,var(--purple),transparent);}
+#filesModal .modal-title{color:var(--purple);}
+.files-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(130px,1fr));gap:12px;margin-bottom:16px;}
+.fcard{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px;text-align:center;transition:all 0.3s;}
+.fcard:hover{border-color:var(--purple);transform:translateY(-2px);}
+.fcard-icon{font-size:32px;margin-bottom:6px;cursor:pointer;}
+.fcard-img{width:100%;height:80px;object-fit:cover;border-radius:4px;margin-bottom:6px;cursor:pointer;}
+.fcard-name{font-size:10px;color:var(--text);word-break:break-all;line-height:1.4;}
+.fcard-size{font-size:10px;color:var(--muted);margin-top:3px;}
+.fcard-acts{display:flex;justify-content:center;gap:6px;margin-top:8px;}
+
+/* IMAGE VIEWER */
+#imgViewer{position:fixed;inset:0;background:rgba(0,0,0,0.97);z-index:2000;display:none;align-items:center;justify-content:center;flex-direction:column;}
+#imgViewer.open{display:flex;}
+#imgViewerWrap{overflow:hidden;width:100vw;height:100vh;display:flex;align-items:center;justify-content:center;cursor:grab;touch-action:none;}
+#imgViewerWrap.grabbing{cursor:grabbing;}
+#imgViewerImg{max-width:95vw;max-height:88vh;border-radius:6px;border:1px solid var(--border);transform-origin:center;transition:transform 0.15s;user-select:none;pointer-events:none;}
+.iv-bar{position:fixed;bottom:0;left:0;right:0;background:rgba(3,9,18,0.92);padding:10px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;z-index:2001;}
+.iv-name{font-size:11px;color:var(--muted);font-family:'Orbitron',sans-serif;flex:1;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.iv-actions{display:flex;gap:8px;flex-shrink:0;}
+.iv-btn{background:var(--card);border:1px solid var(--border);color:var(--text);width:38px;height:38px;border-radius:8px;cursor:pointer;font-size:18px;display:flex;align-items:center;justify-content:center;transition:all 0.2s;}
+.iv-btn:hover{border-color:var(--accent);color:var(--accent);}
+.iv-btn.dl-btn:hover{border-color:var(--green);color:var(--green);}
+.iv-btn.close-btn:hover{border-color:var(--red);color:var(--red);}
+.iv-zoom{font-size:11px;color:var(--muted);font-family:'Orbitron',sans-serif;min-width:40px;text-align:center;}
+#imgViewerClose{position:absolute;top:12px;right:12px;background:rgba(3,9,18,0.8);border:1px solid var(--border);color:var(--text);width:34px;height:34px;border-radius:50%;cursor:pointer;font-size:16px;z-index:2002;display:flex;align-items:center;justify-content:center;}
+
+/* FILE PREVIEW */
+#filePreviewModal{position:fixed;inset:0;background:rgba(0,0,0,0.95);z-index:3000;display:none;flex-direction:column;}
+#filePreviewModal.open{display:flex;}
+.fp-header{display:flex;align-items:center;justify-content:space-between;padding:10px 16px;background:var(--panel);border-bottom:1px solid var(--border);flex-shrink:0;gap:10px;}
+.fp-title{font-size:12px;color:var(--text);font-family:'Orbitron',sans-serif;letter-spacing:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;flex:1;}
+.fp-actions{display:flex;gap:8px;flex-shrink:0;}
+.fp-btn{background:var(--card);border:1px solid var(--border);color:var(--text);padding:7px 14px;border-radius:6px;cursor:pointer;font-family:'Cairo',sans-serif;font-size:13px;display:flex;align-items:center;gap:5px;transition:all 0.2s;}
+.fp-btn.dl:hover{border-color:var(--green);color:var(--green);}
+.fp-btn.cls:hover{border-color:var(--red);color:var(--red);}
+#filePreviewFrame{flex:1;width:100%;border:none;background:#fff;}
+.fp-unsupported{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;color:var(--muted);}
+.fp-unsupported .fp-icon{font-size:60px;opacity:0.3;}
+.fp-unsupported .fp-msg{font-size:14px;color:var(--text);}
+.fp-unsupported .fp-hint{font-size:12px;opacity:0.8;text-align:center;max-width:300px;line-height:1.9;}
+
+/* MAINTENANCE */
+.maint-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+  background:rgba(0,255,136,0.06);border:1px solid rgba(0,255,136,0.2);border-radius:8px;padding:14px 18px;margin-bottom:16px;}
+.maint-title-block{display:flex;align-items:center;gap:14px;}
+.maint-icon{font-size:32px;}
+.maint-title{font-family:'Orbitron',sans-serif;font-size:13px;color:var(--green);letter-spacing:2px;}
+.maint-sub{font-size:11px;color:var(--muted);margin-top:3px;}
+.maint-acts{display:flex;gap:8px;flex-wrap:wrap;}
+.maint-table-wrap{background:var(--card);border:1px solid rgba(0,255,136,0.2);border-radius:8px;overflow:hidden;}
+.maint-table{width:100%;border-collapse:collapse;min-width:900px;}
+.maint-table thead tr{background:rgba(0,255,136,0.06);}
+.maint-table th{padding:10px 12px;text-align:right;font-size:10px;color:var(--green);letter-spacing:1px;
+  font-weight:700;border-bottom:1px solid rgba(0,255,136,0.2);font-family:'Orbitron',sans-serif;
+  white-space:nowrap;min-width:120px;}
+.maint-table td{padding:9px 12px;font-size:12px;border-bottom:1px solid rgba(26,58,110,0.35);color:var(--text);vertical-align:middle;}
+.maint-table tbody tr:hover{background:rgba(0,255,136,0.03);}
+.maint-table tbody tr:last-child td{border-bottom:none;}
+.maint-cell{display:flex;flex-direction:column;gap:3px;}
+.maint-val{font-size:11px;color:var(--text);}
+.maint-status{font-size:10px;font-family:'Orbitron',sans-serif;padding:2px 7px;border-radius:3px;display:inline-block;width:fit-content;}
+.maint-status.DONE{background:rgba(0,255,136,0.12);color:var(--green);border:1px solid rgba(0,255,136,0.3);}
+.maint-status.DUE{background:rgba(255,215,0,0.12);color:var(--yellow);border:1px solid rgba(255,215,0,0.3);}
+.maint-status.OVERDUE{background:rgba(255,51,102,0.12);color:var(--red);border:1px solid rgba(255,51,102,0.3);}
+.maint-ac{font-family:'Orbitron',sans-serif;font-size:11px;color:var(--accent);background:rgba(0,200,255,0.08);
+  border:1px solid rgba(0,200,255,0.25);padding:2px 9px;border-radius:3px;display:inline-block;}
+.maint-airframe{font-family:'Cairo',sans-serif;font-size:14px;font-weight:700;color:#ffffff;}
+.maint-note{max-width:140px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;color:var(--muted);font-size:11px;}
+.maint-item-card{background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:12px 14px;transition:border-color 0.3s;}
+.maint-item-card.status-DONE{border-color:rgba(0,255,136,0.4);}
+.maint-item-card.status-DUE{border-color:rgba(255,215,0,0.4);}
+.maint-item-card.status-OVERDUE{border-color:rgba(255,51,102,0.5);background:rgba(255,51,102,0.04);}
+.maint-item-header{display:flex;align-items:center;justify-content:space-between;gap:10px;margin-bottom:10px;}
+.maint-item-label{font-size:11px;color:var(--text);font-weight:600;letter-spacing:0.5px;}
+.maint-status-badge{font-size:10px;font-family:'Orbitron',sans-serif;padding:3px 10px;border-radius:4px;
+  white-space:nowrap;border:1px solid var(--border);color:var(--muted);background:var(--card);}
+.maint-status-badge.DONE{background:rgba(0,255,136,0.12);color:var(--green);border-color:rgba(0,255,136,0.3);}
+.maint-status-badge.DUE{background:rgba(255,215,0,0.12);color:var(--yellow);border-color:rgba(255,215,0,0.3);}
+.maint-status-badge.OVERDUE{background:rgba(255,51,102,0.12);color:var(--red);border-color:rgba(255,51,102,0.3);}
+.maint-item-body{display:flex;gap:14px;align-items:flex-end;flex-wrap:wrap;}
+.maint-calc-result{font-size:12px;color:var(--text);padding:9px 14px;background:var(--card);
+  border:1px solid var(--border);border-radius:4px;min-width:200px;flex:1;line-height:1.9;
+  font-family:'Cairo',sans-serif;white-space:pre-line;}
+
+/* APP ENTRY SCREEN */
+#appEntryScreen{position:fixed;inset:0;background:var(--bg);z-index:99999;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:20px;}
+#appEntryScreen.hidden{display:none;}
+.entry-logo{width:80px;height:80px;background:linear-gradient(135deg,var(--accent),#0070aa);
+  clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%);
+  display:flex;align-items:center;justify-content:center;font-size:36px;margin-bottom:8px;
+  box-shadow:0 0 40px rgba(0,200,255,0.3);}
+.entry-title{font-family:'Orbitron',sans-serif;font-size:18px;color:var(--accent);letter-spacing:3px;text-shadow:var(--glow);}
+.entry-sub{font-size:12px;color:var(--muted);letter-spacing:2px;margin-bottom:8px;}
+.entry-input{background:var(--card);border:2px solid var(--border);color:var(--text);
+  padding:14px 28px;border-radius:8px;font-family:'Orbitron',sans-serif;font-size:16px;
+  outline:none;text-align:center;width:280px;letter-spacing:6px;transition:border-color 0.3s;}
+.entry-input:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,200,255,0.15);}
+.entry-btn{background:linear-gradient(135deg,var(--accent),#0070aa);color:#000;border:none;
+  padding:13px 40px;border-radius:8px;font-family:'Cairo',sans-serif;font-size:15px;font-weight:700;
+  cursor:pointer;transition:all 0.3s;letter-spacing:1px;}
+.entry-btn:hover{box-shadow:var(--glow);transform:translateY(-1px);}
+.entry-err{color:var(--red);font-size:13px;display:none;font-family:'Cairo',sans-serif;}
+.entry-hint{font-size:11px;color:var(--muted);opacity:0.5;font-family:'Orbitron',sans-serif;letter-spacing:1px;}
+@keyframes shake{0%,100%{transform:translateX(0)}20%{transform:translateX(-8px)}40%{transform:translateX(8px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+
+/* HEADER EDITOR */
+#headerEditorModal .modal::before{background:linear-gradient(90deg,transparent,var(--accent2),transparent);}
+.he-section{margin-bottom:18px;}
+.he-section-title{font-size:10px;color:var(--accent);font-family:'Orbitron',sans-serif;letter-spacing:2px;
+  margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border);}
+.he-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+@media(max-width:480px){.he-grid{grid-template-columns:1fr;}}
+.he-item{display:flex;flex-direction:column;gap:4px;}
+.he-item label{font-size:10px;color:var(--muted);letter-spacing:1px;}
+.he-item input{background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:8px 12px;border-radius:4px;font-family:'Cairo',sans-serif;font-size:13px;outline:none;
+  transition:border-color 0.3s;width:100%;}
+.he-item input:focus{border-color:var(--accent2);}
+
+/* POD UPDATE */
+.pod-header{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;
+  background:rgba(0,200,255,0.06);border:1px solid rgba(0,200,255,0.25);border-radius:8px;padding:14px 18px;margin-bottom:16px;}
+.pod-title-block{display:flex;align-items:center;gap:14px;}
+.pod-icon{font-size:32px;}
+.pod-title{font-family:'Orbitron',sans-serif;font-size:13px;color:var(--accent);letter-spacing:2px;}
+.pod-sub{font-size:11px;color:var(--muted);margin-top:3px;}
+.pod-acts{display:flex;gap:8px;flex-wrap:wrap;}
+.pod-update-bar{display:flex;align-items:center;gap:12px;flex-wrap:wrap;
+  background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px 16px;margin-bottom:14px;}
+.pod-update-label{font-size:11px;color:var(--accent);font-family:'Orbitron',sans-serif;letter-spacing:1px;white-space:nowrap;}
+.pod-verify-input{background:var(--panel);border:1px solid var(--border);color:var(--text);
+  padding:8px 14px;border-radius:4px;font-family:'Cairo',sans-serif;font-size:13px;outline:none;
+  flex:1;min-width:160px;max-width:280px;transition:border-color 0.3s;}
+.pod-verify-input:not([readonly]):focus{border-color:var(--accent);}
+.pod-verify-input[readonly]{opacity:0.7;cursor:default;}
+.pod-update-date{font-size:12px;color:var(--muted);font-family:'Orbitron',sans-serif;white-space:nowrap;}
+.pod-table-wrap{background:var(--card);border:1px solid rgba(0,200,255,0.2);border-radius:8px;overflow:hidden;margin-bottom:16px;}
+.pod-table{width:100%;border-collapse:collapse;min-width:1400px;}
+.pod-table thead tr{background:rgba(0,200,255,0.06);}
+.pod-table th{padding:10px 14px;text-align:left;font-size:10px;color:var(--accent);letter-spacing:1px;
+  font-weight:700;border-bottom:1px solid rgba(0,200,255,0.2);font-family:'Orbitron',sans-serif;
+  white-space:nowrap;min-width:90px;}
+.pod-table td{padding:9px 14px;font-size:12px;border-bottom:1px solid rgba(26,58,110,0.35);color:var(--text);vertical-align:middle;white-space:nowrap;text-align:left;}
+.pod-table tbody tr:hover{background:rgba(0,200,255,0.03);}
+.pod-table tbody tr:last-child td{border-bottom:none;}
+.pod-status-good{background:rgba(0,255,136,0.12);color:var(--green);border:1px solid rgba(0,255,136,0.35);
+  padding:3px 10px;border-radius:4px;font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;display:inline-block;}
+.pod-status-na{background:rgba(255,215,0,0.12);color:var(--yellow);border:1px solid rgba(255,215,0,0.35);
+  padding:3px 10px;border-radius:4px;font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;display:inline-block;}
+.pod-status-bad{background:rgba(255,51,102,0.12);color:var(--red);border:1px solid rgba(255,51,102,0.35);
+  padding:3px 10px;border-radius:4px;font-family:'Orbitron',sans-serif;font-size:10px;font-weight:700;display:inline-block;}
+
+/* POD ARCHIVE — جديد مُحسَّن */
+.pod-archive-section{background:var(--card);border:1px solid rgba(0,200,255,0.2);border-radius:8px;overflow:hidden;margin-top:16px;}
+.pod-archive-header{display:flex;align-items:center;justify-content:space-between;padding:14px 18px;
+  border-bottom:1px solid var(--border);background:rgba(0,200,255,0.04);flex-wrap:wrap;gap:10px;}
+.pod-archive-title{font-family:'Orbitron',sans-serif;font-size:11px;color:var(--accent);letter-spacing:2px;display:flex;align-items:center;gap:8px;}
+.pod-archive-filters{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.pod-archive-select{background:var(--bg);border:1px solid var(--border);color:var(--text);
+  padding:7px 12px;border-radius:4px;font-family:'Cairo',sans-serif;font-size:12px;outline:none;transition:border-color 0.3s;}
+.pod-archive-select:focus{border-color:var(--accent);}
+.pod-archive-count{font-size:10px;color:var(--muted);background:var(--bg);padding:3px 10px;border-radius:20px;border:1px solid var(--border);}
+/* جدول الأرشيف */
+.pod-archive-table-wrap{overflow-x:auto;}
+.pod-archive-table{width:100%;border-collapse:collapse;min-width:900px;}
+.pod-archive-table thead tr{background:rgba(0,200,255,0.04);}
+.pod-archive-table th{padding:9px 14px;text-align:left;font-size:9px;color:var(--muted);letter-spacing:1px;
+  font-weight:700;border-bottom:1px solid var(--border);font-family:'Orbitron',sans-serif;white-space:nowrap;}
+.pod-archive-table td{padding:9px 14px;font-size:11px;border-bottom:1px solid rgba(26,58,110,0.25);color:var(--text);vertical-align:middle;white-space:nowrap;text-align:left;}
+.pod-archive-table tbody tr:hover{background:rgba(0,200,255,0.02);}
+.pod-archive-table tbody tr:last-child td{border-bottom:none;}
+/* شارة A/C القديمة → الجديدة */
+.ac-change-cell{display:flex;align-items:center;gap:6px;font-family:'Orbitron',sans-serif;font-size:11px;}
+.ac-old{background:rgba(255,51,102,0.1);border:1px solid rgba(255,51,102,0.3);color:var(--red);padding:2px 8px;border-radius:3px;}
+.ac-arrow{color:var(--muted);font-size:13px;}
+.ac-new{background:rgba(0,255,136,0.1);border:1px solid rgba(0,255,136,0.3);color:var(--green);padding:2px 8px;border-radius:3px;}
+.ac-same{background:rgba(0,200,255,0.08);border:1px solid rgba(0,200,255,0.25);color:var(--accent);padding:2px 8px;border-radius:3px;}
+/* خلية التغييرات */
+.pod-archive-changes{display:flex;flex-wrap:wrap;gap:4px;max-width:380px;}
+.pod-change-tag{background:rgba(255,107,0,0.08);border:1px solid rgba(255,107,0,0.25);
+  border-radius:4px;padding:2px 7px;font-size:10px;font-family:'Orbitron',sans-serif;white-space:nowrap;}
+.pod-change-tag .old-val{color:var(--red);text-decoration:line-through;margin-left:4px;}
+.pod-change-tag .new-val{color:var(--green);margin-right:4px;}
+.pod-change-tag .field-lbl{color:var(--muted);}
+/* شارة نوع العملية */
+.op-badge{font-size:9px;font-family:'Orbitron',sans-serif;padding:2px 8px;border-radius:3px;white-space:nowrap;}
+.op-badge.add{background:rgba(0,255,136,0.12);color:var(--green);border:1px solid rgba(0,255,136,0.3);}
+.op-badge.edit{background:rgba(0,200,255,0.12);color:var(--accent);border:1px solid rgba(0,200,255,0.3);}
+/* empty archive */
+.archive-empty{text-align:center;padding:32px;color:var(--muted);}
+.archive-empty-icon{font-size:32px;opacity:0.25;margin-bottom:8px;}
+
+.hidden{display:none!important;}
+::-webkit-scrollbar{width:4px;}::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px;}
+
+/* PASSWORD MANAGER */
+.pass-mgr-section{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:18px;margin-bottom:16px;}
+.pass-mgr-title{font-family:'Orbitron',sans-serif;font-size:11px;letter-spacing:2px;color:var(--accent2);margin-bottom:16px;padding-bottom:10px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:8px;}
+.pass-item{background:var(--panel);border:1px solid var(--border);border-radius:8px;padding:14px 16px;margin-bottom:10px;}
+.pass-item:last-child{margin-bottom:0;}
+.pass-item-label{font-size:11px;color:var(--muted);letter-spacing:1px;font-family:'Orbitron',sans-serif;margin-bottom:10px;}
+.pass-item-label span{color:var(--text);font-family:'Cairo',sans-serif;letter-spacing:0;font-size:12px;}
+.pass-row{display:flex;gap:8px;align-items:center;}
+.pass-row input{flex:1;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:9px 12px;border-radius:4px;font-family:'Cairo',sans-serif;font-size:13px;outline:none;transition:border-color 0.3s;}
+.pass-row input:focus{border-color:var(--accent2);}
+.pass-eye{background:none;border:1px solid var(--border);color:var(--muted);width:36px;height:36px;border-radius:4px;cursor:pointer;font-size:15px;display:flex;align-items:center;justify-content:center;flex-shrink:0;transition:all 0.2s;}
+.pass-eye:hover{border-color:var(--accent);color:var(--accent);}
+.pass-save-btn{background:linear-gradient(135deg,var(--accent2),#cc5500);color:#fff;border:none;border-radius:4px;padding:9px 16px;font-family:'Cairo',sans-serif;font-size:13px;font-weight:700;cursor:pointer;transition:all 0.3s;white-space:nowrap;}
+.pass-save-btn:hover{box-shadow:var(--glow2);}
+.pass-strength{height:3px;border-radius:2px;margin-top:6px;transition:all 0.3s;background:var(--border);width:0%;}
+</style>
+</head>
+<body>
+
+<!-- APP ENTRY -->
+<div id="appEntryScreen">
+  <div class="entry-logo">✈</div>
+  <div class="entry-title">F-16 PARTS MGMT</div>
+  <div class="entry-sub">IRAQI AIR FORCE — نظام إدارة القطع</div>
+  <input type="password" class="entry-input" id="entryInput"
+    placeholder="XXXXXXX" maxlength="7"
+    onkeydown="if(event.key==='Enter')checkEntryCode()"
+    oninput="this.value=this.value.toUpperCase()">
+  <button class="entry-btn" onclick="checkEntryCode()">🔓 دخول</button>
+  <div class="entry-err" id="entryErr">❌ رمز الدخول غير صحيح</div>
+  <div class="entry-hint">أدخل رمز الدخول للمتابعة</div>
+</div>
+
+<script>
+var _appStarted = false;
+var _entryPass = 'HZ16TNB'; // القيمة الافتراضية — تُحدَّث من Firestore بعد الدخول
+function checkEntryCode(){
+  var val = document.getElementById('entryInput').value.trim().toUpperCase();
+  var expected = (typeof APP_PASS !== 'undefined' ? APP_PASS : _entryPass).toUpperCase();
+  if(val === expected){
+    document.getElementById('appEntryScreen').classList.add('hidden');
+    document.getElementById('loadingScreen').classList.remove('hidden');
+    if(window._startApp) window._startApp();
+    else { var t=setInterval(function(){ if(window._startApp){ clearInterval(t); window._startApp(); } },100); }
+  } else {
+    var err = document.getElementById('entryErr');
+    err.style.display = 'block';
+    var inp = document.getElementById('entryInput');
+    inp.value = '';
+    inp.style.animation = 'shake 0.4s';
+    setTimeout(function(){ inp.style.animation=''; inp.focus(); }, 400);
+  }
+}
+setTimeout(function(){ document.getElementById('entryInput').focus(); }, 300);
+</script>
+
+<!-- LOADING -->
+<div id="loadingScreen" class="hidden">
+  <div class="spinner"></div>
+  <div class="loading-label">جارٍ الاتصال...</div>
+  <div class="loading-sub">Firebase • Firestore</div>
+</div>
+
+<!-- OWNER LOCK -->
+<div id="lockScreen" class="lock-screen hidden">
+  <div class="lock-icon">🔐</div>
+  <div class="lock-title" style="color:var(--accent2)">OWNER ACCESS</div>
+  <div class="lock-sub">أدخل كلمة مرور المالك</div>
+  <input type="password" class="lock-input" id="lockInput" placeholder="••••"
+    style="border-color:var(--accent2)" onkeydown="if(event.key==='Enter')checkPass()">
+  <button class="btn btn-orange" onclick="checkPass()">دخول</button>
+  <div class="lock-err" id="lockErr">❌ كلمة المرور غير صحيحة</div>
+  <button class="btn-ghost" style="margin-top:4px" onclick="cancelLock()">إلغاء</button>
+</div>
+
+<!-- AGENT LOCK -->
+<div id="agentLockScreen" class="lock-screen hidden">
+  <div class="lock-icon" style="opacity:0.3">🔑</div>
+  <div class="lock-title" style="color:var(--accent)">AGENT ACCESS</div>
+  <div class="lock-sub">أدخل كلمة مرور الوكيل — إضافة فقط</div>
+  <input type="password" class="lock-input" id="agentLockInput" placeholder="••••"
+    style="border-color:var(--accent)" onkeydown="if(event.key==='Enter')checkAgentPass()">
+  <button class="btn btn-primary" onclick="checkAgentPass()">دخول</button>
+  <div class="lock-err" id="agentLockErr">❌ كلمة المرور غير صحيحة</div>
+  <button class="btn-ghost" style="margin-top:4px" onclick="cancelAgentLock()">إلغاء</button>
+</div>
+
+<!-- SYNC / TOAST -->
+<div id="syncBadge"><div class="sdot pulse" id="sdot"></div><span id="syncLabel">جارٍ الاتصال...</span></div>
+<div id="toast"></div>
+
+<!-- IMAGE VIEWER -->
+<div id="imgViewer">
+  <div id="imgViewerClose" onclick="closeImgViewer()">✕</div>
+  <div id="imgViewerWrap">
+    <img id="imgViewerImg" src="" alt="" draggable="false">
+  </div>
+  <div class="iv-bar">
+    <div class="iv-name" id="imgViewerName"></div>
+    <div class="iv-actions">
+      <button class="iv-btn" onclick="ivZoom(-0.25)">−</button>
+      <div class="iv-zoom" id="ivZoomLabel">100%</div>
+      <button class="iv-btn" onclick="ivZoom(0.25)">+</button>
+      <button class="iv-btn" onclick="ivReset()">⟳</button>
+      <button class="iv-btn dl-btn" onclick="ivDownload()">⬇</button>
+      <button class="iv-btn close-btn" onclick="closeImgViewer()">✕</button>
+    </div>
+  </div>
+</div>
+
+<!-- FILE PREVIEW -->
+<div id="filePreviewModal">
+  <div class="fp-header">
+    <div class="fp-title" id="fpTitle">معاينة الملف</div>
+    <div class="fp-actions">
+      <button class="fp-btn dl" onclick="fpDownload()">⬇ تحميل</button>
+      <button class="fp-btn cls" onclick="closeFilePreview()">✕ إغلاق</button>
+    </div>
+  </div>
+  <iframe id="filePreviewFrame" src="" allowfullscreen></iframe>
+  <div class="fp-unsupported hidden" id="fpUnsupported">
+    <div class="fp-icon" id="fpIcon">📄</div>
+    <div class="fp-msg" id="fpMsg">لا يمكن معاينة هذا الملف مباشرة</div>
+    <div class="fp-hint">حمّله وافتحه على جهازك</div>
+    <button class="fp-btn dl" onclick="fpDownload()" style="margin-top:8px;padding:12px 28px;font-size:14px;">⬇ تحميل الملف</button>
+  </div>
+</div>
+
+<!-- HEADER -->
+<header class="header">
+  <div class="header-top">
+    <div class="logo">
+      <div class="logo-icon" id="secretTap" onclick="handleSecretTap()" style="cursor:default;user-select:none;">✈</div>
+      <div>
+        <div class="logo-text">F-16 PARTS</div>
+        <div class="logo-sub">مزامنة فورية • Firebase</div>
+      </div>
+    </div>
+    <div class="hdr-right">
+      <div class="live-dot"></div>
+      <span id="clock"></span>
+    </div>
+  </div>
+  <nav class="nav-bottom">
+    <button class="nav-tab active" id="tab-viewer" onclick="showPage('viewer')">
+      <span class="tab-icon">📋</span><span class="tab-label">عرض</span>
+    </button>
+    <button class="nav-tab" id="tab-maint" onclick="showPage('maint')">
+      <span class="tab-icon">🔧</span><span class="tab-label">Maintenance</span>
+    </button>
+    <button class="nav-tab" id="tab-pod" onclick="showPage('pod')">
+      <span class="tab-icon">🛰️</span><span class="tab-label">POD UPDATE</span>
+    </button>
+    <button class="nav-tab agent-tab hidden" id="tab-agent" onclick="requestAgent()">
+      <span class="tab-icon">🔑</span><span class="tab-label">وكيل</span>
+    </button>
+    <button class="nav-tab owner-tab hidden" id="tab-owner" onclick="requestOwner()">
+      <span class="tab-icon">⚙️</span><span class="tab-label">مالك</span>
+    </button>
+  </nav>
+</header>
+
+<div class="main">
+
+  <!-- ══ VIEWER PAGE ══ -->
+  <div class="page active" id="viewerPage">
+    <div class="stats-row">
+      <div class="stat-card blue"><div class="stat-label">إجمالي القطع</div><div class="stat-value" id="sTotal">0</div><div class="stat-sub">قطعة</div></div>
+      <div class="stat-card orange"><div class="stat-label">الطائرات</div><div class="stat-value" id="sAircraft">0</div><div class="stat-sub">طائرة F-16</div></div>
+      <div class="stat-card green"><div class="stat-label">التصنيفات</div><div class="stat-value" id="sMfg">0</div><div class="stat-sub">NOMENCLATURE</div></div>
+      <div class="stat-card yellow"><div class="stat-label">نتائج البحث</div><div class="stat-value" id="sResults">—</div><div class="stat-sub">سجل</div></div>
+    </div>
+    <div class="search-panel">
+      <div class="sp-title blue">🔍 البحث والتصفية</div>
+      <div class="search-row">
+        <div class="sg"><label>نوع الحقل</label>
+          <select id="vField">
+            <option value="all">— كل الحقول —</option>
+            <option value="sequence">التسلسل</option><option value="aircraft_no">رقم الطائرة</option>
+            <option value="nomenclature">NOMENCLATURE</option><option value="pn">PN</option>
+            <option value="sn">SN</option><option value="nsn">NSN</option>
+            <option value="notes">الملاحظات</option>
+          </select>
+        </div>
+        <div class="sg" style="flex:2"><label>كلمة البحث</label><input type="text" id="vQuery" placeholder="ابحث..." oninput="doSearch('v')"></div>
+        <div class="sg"><label>الطائرة</label><select id="vAC" onchange="doSearch('v')"><option value="">الكل</option></select></div>
+        <button class="btn btn-primary" onclick="doSearch('v')">بحث</button>
+        <button class="btn-ghost" onclick="clearSearch('v')">مسح</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <div class="table-head">
+        <span class="table-title blue">F-16 FIGHTING FALCON — قاعدة البيانات</span>
+        <span class="tbl-count" id="vCount">0 سجل</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>#</th><th data-col="c_seq">التسلسل</th><th data-col="c_ac">الطائرة</th><th data-col="c_nom">NOMENCLATURE</th><th data-col="c_pn">PN</th><th data-col="c_sn">SN</th><th data-col="c_nsn">NSN</th><th data-col="c_notes">الملاحظات</th><th data-col="c_files">ملفات</th></tr></thead>
+          <tbody id="vBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ AGENT PAGE ══ -->
+  <div class="page" id="agentPage">
+    <div class="role-bar agent">
+      <div class="role-badge">🔑 وضع الوكيل — إضافة وتعديل (لا يمكن الحذف)</div>
+      <div class="role-acts">
+        <button class="btn btn-green" onclick="openAdd()">＋ إضافة قطعة</button>
+      </div>
+    </div>
+    <div class="search-panel">
+      <div class="sp-title blue">🔍 بحث</div>
+      <div class="search-row">
+        <div class="sg"><label>نوع الحقل</label>
+          <select id="agField">
+            <option value="all">— كل الحقول —</option>
+            <option value="sequence">التسلسل</option><option value="aircraft_no">رقم الطائرة</option>
+            <option value="nomenclature">NOMENCLATURE</option><option value="pn">PN</option>
+            <option value="sn">SN</option><option value="nsn">NSN</option>
+          </select>
+        </div>
+        <div class="sg" style="flex:2"><label>كلمة البحث</label><input type="text" id="agQuery" placeholder="ابحث..." oninput="doSearch('ag')"></div>
+        <button class="btn btn-primary" onclick="doSearch('ag')">بحث</button>
+        <button class="btn-ghost" onclick="clearSearch('ag')">مسح</button>
+      </div>
+    </div>
+    <div class="table-wrap">
+      <div class="table-head">
+        <span class="table-title blue">القطع المسجّلة — وضع الوكيل</span>
+        <span class="tbl-count" id="agCount">0 سجل</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>#</th><th data-col="c_seq">التسلسل</th><th data-col="c_ac">الطائرة</th><th data-col="c_nom">NOMENCLATURE</th><th data-col="c_pn">PN</th><th data-col="c_sn">SN</th><th data-col="c_nsn">NSN</th><th data-col="c_notes">الملاحظات</th><th data-col="c_files">ملفات</th><th data-col="c_acts">إجراءات</th></tr></thead>
+          <tbody id="agBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ OWNER PAGE ══ -->
+  <div class="page" id="ownerPage">
+    <div class="role-bar owner">
+      <div class="role-badge">⚙️ لوحة المالك — صلاحية كاملة</div>
+      <div class="role-acts">
+        <button class="btn btn-green" onclick="openAdd()">＋ إضافة قطعة</button>
+        <button class="btn-ghost" onclick="exportCSV()">📥 CSV</button>
+        <button class="btn-ghost" onclick="openHeaderEditor()" style="border-color:var(--accent2);color:var(--accent2);">✏️ تعديل العناوين</button>
+      </div>
+    </div>
+    <div class="search-panel">
+      <div class="sp-title orange">🔍 بحث الإدارة</div>
+      <div class="search-row">
+        <div class="sg"><label>نوع الحقل</label>
+          <select id="oField">
+            <option value="all">— كل الحقول —</option>
+            <option value="sequence">التسلسل</option><option value="aircraft_no">رقم الطائرة</option>
+            <option value="nomenclature">NOMENCLATURE</option><option value="pn">PN</option>
+            <option value="sn">SN</option><option value="nsn">NSN</option>
+          </select>
+        </div>
+        <div class="sg" style="flex:2"><label>كلمة البحث</label><input type="text" id="oQuery" placeholder="ابحث..." oninput="doSearch('o')"></div>
+        <button class="btn btn-orange" onclick="doSearch('o')">بحث</button>
+        <button class="btn-ghost" onclick="clearSearch('o')">مسح</button>
+      </div>
+    </div>
+    <!-- ══ إدارة كلمات المرور — للمالك فقط ══ -->
+    <div class="pass-mgr-section">
+      <div class="pass-mgr-title">🔐 إدارة كلمات المرور — للمالك فقط</div>
+      <div class="pass-item">
+        <div class="pass-item-label">🔑 كلمة سر الدخول للتطبيق <span>(رمز الشاشة الرئيسية)</span></div>
+        <div class="pass-row">
+          <input type="password" id="newAppPass" placeholder="كلمة المرور الجديدة..." autocomplete="new-password">
+          <button class="pass-eye" onclick="togglePassVis('newAppPass',this)">👁</button>
+          <button class="pass-save-btn" onclick="changeAppPass()">💾 حفظ</button>
+        </div>
+        <div class="pass-strength" id="strengthApp"></div>
+      </div>
+      <div class="pass-item">
+        <div class="pass-item-label">🔑 كلمة سر الوكيل <span>(صلاحية إضافة وتعديل)</span></div>
+        <div class="pass-row">
+          <input type="password" id="newAgentPass" placeholder="كلمة المرور الجديدة..." autocomplete="new-password">
+          <button class="pass-eye" onclick="togglePassVis('newAgentPass',this)">👁</button>
+          <button class="pass-save-btn" onclick="changeAgentPass()">💾 حفظ</button>
+        </div>
+        <div class="pass-strength" id="strengthAgent"></div>
+      </div>
+      <div class="pass-item">
+        <div class="pass-item-label">🔑 كلمة سر المالك <span>(صلاحية كاملة)</span></div>
+        <div class="pass-row">
+          <input type="password" id="newOwnerPass" placeholder="كلمة المرور الجديدة..." autocomplete="new-password">
+          <button class="pass-eye" onclick="togglePassVis('newOwnerPass',this)">👁</button>
+          <button class="pass-save-btn" onclick="changeOwnerPass()">💾 حفظ</button>
+        </div>
+        <div class="pass-strength" id="strengthOwner"></div>
+      </div>
+    </div>
+
+    <div class="table-wrap">
+      <div class="table-head">
+        <span class="table-title orange">إدارة قطع الغيار — تعديل وحذف</span>
+        <span class="tbl-count" id="oCount">0 سجل</span>
+      </div>
+      <div style="overflow-x:auto">
+        <table>
+          <thead><tr><th>#</th><th data-col="c_seq">التسلسل</th><th data-col="c_ac">الطائرة</th><th data-col="c_nom">NOMENCLATURE</th><th data-col="c_pn">PN</th><th data-col="c_sn">SN</th><th data-col="c_nsn">NSN</th><th data-col="c_notes">الملاحظات</th><th data-col="c_files">ملفات</th><th data-col="c_acts">إجراءات</th></tr></thead>
+          <tbody id="oBody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ MAINTENANCE PAGE ══ -->
+  <div class="page" id="maintPage">
+    <div class="maint-header">
+      <div class="maint-title-block">
+        <div class="maint-icon">🔧</div>
+        <div>
+          <div class="maint-title">SCHEDULED MAINTENANCE</div>
+          <div class="maint-sub">F-16 Fighting Falcon — جدول الصيانة الدورية</div>
+        </div>
+      </div>
+      <div class="maint-acts" id="maintActs"></div>
+    </div>
+    <div class="maint-table-wrap">
+      <div style="overflow-x:auto">
+        <table class="maint-table">
+          <thead>
+            <tr>
+              <th data-col="m_ac">A/C</th>
+              <th data-col="m_af">AIRFRAME TIME</th>
+              <th data-col="m_dau">75 HR DAU REM</th>
+              <th data-col="m_90d">90 DAY THREAT WARN / ECM & TACDS SYS CHECK</th>
+              <th data-col="m_75dl">75 HR DOWNLOAD DATA ACQUISITION SYS</th>
+              <th data-col="m_12mo">12 MONTH CLEAN BEAC BATT SWITCH / BATT TEST</th>
+              <th data-col="m_400">400 HR WAVEGUIDE DEHYD DESIC CARRT R2 DUE</th>
+              <th data-col="m_note">NOTE</th>
+              <th data-col="m_acts">إجراءات</th>
+              <th data-col="m_ac_end">A/C</th>
+            </tr>
+          </thead>
+          <tbody id="maintBody">
+            <tr><td colspan="10"><div class="empty"><div class="empty-icon">🔧</div>لا توجد سجلات — اضغط إضافة سجل</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- ══ POD UPDATE PAGE ══ -->
+  <div class="page" id="podPage">
+    <div class="pod-header">
+      <div class="pod-title-block">
+        <div class="pod-icon">🛰️</div>
+        <div>
+          <div class="pod-title">POD UPDATE</div>
+          <div class="pod-sub">F-16 Fighting Falcon — تحديث بيانات الـ POD</div>
+        </div>
+      </div>
+      <div class="pod-acts" id="podActs"></div>
+    </div>
+
+    <!-- LAST UPDATE BAR -->
+    <div class="pod-update-bar" id="podUpdateBar">
+      <span class="pod-update-label">📋 LAST UPDATE &amp; VERIFY BY:</span>
+      <input id="podVerifyBy" class="pod-verify-input" placeholder="اسم المراجع / الرتبة...">
+      <button id="podVerifyBtn" class="btn btn-primary" onclick="savePodVerify()" style="display:none;padding:7px 14px;font-size:12px;">💾 حفظ</button>
+      <span class="pod-update-date" id="podUpdateDate">—</span>
+    </div>
+
+    <!-- POD TABLE -->
+    <div class="pod-table-wrap">
+      <div style="overflow-x:auto;direction:ltr;">
+        <table class="pod-table">
+          <thead>
+            <tr>
+              <th>A/C</th>
+              <th>S/N POD</th>
+              <th>TIME</th>
+              <th>STATUS</th>
+              <th>LETTER CODE</th>
+              <th>S/N A311</th>
+              <th>P/N A311</th>
+              <th>S/N A312</th>
+              <th>P/N A312</th>
+              <th>S/N A314</th>
+              <th>P/N A314</th>
+              <th id="podActsCol" class="hidden">إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="podBody">
+            <tr><td colspan="12"><div class="empty"><div class="empty-icon">🛰️</div>لا توجد سجلات</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ══ POD ARCHIVE — يظهر دائماً ══ -->
+    <div class="pod-archive-section" id="podArchiveSection">
+      <div class="pod-archive-header">
+        <div class="pod-archive-title">
+          📦 أرشيف التغييرات
+          <span class="pod-archive-count" id="podArchiveTotalCount">0 سجل</span>
+        </div>
+        <div class="pod-archive-filters">
+          <select id="podArchiveAC" onchange="renderPodArchive()" class="pod-archive-select">
+            <option value="">— كل الطائرات —</option>
+          </select>
+        </div>
+      </div>
+      <div class="pod-archive-table-wrap">
+        <table class="pod-archive-table">
+          <thead>
+            <tr>
+              <th>التاريخ والوقت</th>
+              <th>A/C (القديم → الجديد)</th>
+              <th>نوع العملية</th>
+              <th>المراجع / المنفذ</th>
+              <th>التغييرات</th>
+              <th id="podArchiveActsCol" class="hidden">إجراءات</th>
+            </tr>
+          </thead>
+          <tbody id="podArchiveBody">
+            <tr><td colspan="6"><div class="archive-empty"><div class="archive-empty-icon">📂</div>لا يوجد أرشيف بعد</div></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+</div><!-- end .main -->
+
+<!-- POD MODAL -->
+<div class="modal-ov" id="podModalOv">
+  <div class="modal" style="max-width:760px;">
+    <div class="modal-title" id="podModalTitle" style="color:#00c8ff">🛰️ إضافة سجل POD</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:14px;">
+      <div class="fg"><label>A/C *</label><input id="pAC" placeholder="F16-501"></div>
+      <div class="fg"><label>S/N POD *</label><input id="pSNPOD" placeholder="SN-POD-001"></div>
+      <div class="fg"><label>TIME (HRS)</label><input id="pTIME" type="number" step="0.1" placeholder="1200.5"></div>
+      <div class="fg">
+        <label>LETTER CODE</label>
+        <input id="pLetterCode" placeholder="C 1 / C 2 / C 3 ..." oninput="autoFillPodStatus()">
+      </div>
+      <div class="fg"><label>STATUS <span style="font-size:9px;color:var(--muted)">(تلقائي)</span></label>
+        <input id="pStatus" placeholder="يُملأ تلقائياً" readonly style="cursor:default;opacity:0.8;">
+      </div>
+      <div class="fg"><label>S/N A311</label><input id="pSNA311" placeholder="SN-A311-001"></div>
+      <div class="fg"><label>P/N A311</label><input id="pPNA311" placeholder="PN-A311-001"></div>
+      <div class="fg"><label>S/N A312</label><input id="pSNA312" placeholder="SN-A312-001"></div>
+      <div class="fg"><label>P/N A312</label><input id="pPNA312" placeholder="PN-A312-001"></div>
+      <div class="fg"><label>S/N A314</label><input id="pSNA314" placeholder="SN-A314-001"></div>
+      <div class="fg"><label>P/N A314</label><input id="pPNA314" placeholder="PN-A314-001"></div>
+    </div>
+    <!-- حقل LAST UPDATE & VERIFY BY الإلزامي — يُفرض قبل كل حفظ ويُسجَّل بالأرشيف مستقلاً لكل طائرة -->
+    <div style="background:rgba(255,215,0,0.06);border:2px solid rgba(255,215,0,0.45);border-radius:8px;padding:14px;margin-bottom:14px;">
+      <div style="display:flex;align-items:center;gap:7px;flex-wrap:wrap;margin-bottom:10px;">
+        <span style="font-size:16px;">📋</span>
+        <span style="font-family:'Orbitron',sans-serif;font-size:11px;color:var(--yellow);letter-spacing:2px;font-weight:700;">LAST UPDATE &amp; VERIFY BY</span>
+        <span style="color:var(--red);font-size:16px;font-weight:900;line-height:1;">*</span>
+        <span style="font-size:10px;color:var(--muted);font-family:'Cairo',sans-serif;">(إلزامي — يُحفظ في الأرشيف باسم المنفذ لكل طائرة بشكل مستقل)</span>
+      </div>
+      <input id="pVerifyBy"
+        placeholder="الاسم / الرتبة / التوقيع ..."
+        style="background:var(--bg);border:2px solid rgba(255,215,0,0.45);color:var(--yellow);
+          padding:11px 14px;border-radius:4px;font-family:'Cairo',sans-serif;font-size:14px;
+          font-weight:700;outline:none;width:100%;transition:border-color 0.25s;"
+        onfocus="this.style.borderColor='var(--yellow)'"
+        onblur="this.style.borderColor='rgba(255,215,0,0.45)'">
+      <div id="pVerifyErr" style="color:var(--red);font-size:12px;margin-top:7px;display:none;">
+        ⚠️ يجب إدخال اسم المراجع / المنفذ قبل الحفظ في الأرشيف
+      </div>
+    </div>
+    <div class="modal-acts">
+      <button class="btn-cancel" onclick="closePodModal()">إلغاء</button>
+      <button class="btn btn-primary" id="podSaveBtn" onclick="savePod()">💾 حفظ السجل</button>
+    </div>
+  </div>
+</div>
+
+<!-- ADD/EDIT MODAL -->
+<div class="modal-ov" id="modalOv">
+  <div class="modal">
+    <div class="modal-title" id="modalTitle">إضافة قطعة غيار</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;background:rgba(0,200,255,0.04);border:1px solid var(--border);border-radius:8px;padding:12px;">
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <label style="font-size:10px;color:var(--muted);letter-spacing:1px;">التسلسل — يمين</label>
+        <input id="fSeq" placeholder="A-001" oninput="document.getElementById('fSeq2').value=this.value" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:4px;font-family:'Cairo',sans-serif;font-size:13px;outline:none;width:100%;">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <label style="font-size:10px;color:var(--muted);letter-spacing:1px;">التسلسل — يسار</label>
+        <input id="fSeq2" placeholder="A-001" oninput="document.getElementById('fSeq').value=this.value" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:4px;font-family:'Cairo',sans-serif;font-size:13px;outline:none;width:100%;">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <label style="font-size:10px;color:var(--muted);letter-spacing:1px;">رقم الطائرة * — يمين</label>
+        <input id="fAC" placeholder="F16-501" oninput="document.getElementById('fAC2').value=this.value" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:4px;font-family:'Cairo',sans-serif;font-size:13px;outline:none;width:100%;">
+      </div>
+      <div style="display:flex;flex-direction:column;gap:5px;">
+        <label style="font-size:10px;color:var(--muted);letter-spacing:1px;">رقم الطائرة * — يسار</label>
+        <input id="fAC2" placeholder="F16-501" oninput="document.getElementById('fAC').value=this.value" style="background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:4px;font-family:'Cairo',sans-serif;font-size:13px;outline:none;width:100%;">
+      </div>
+    </div>
+    <div class="form-grid">
+      <div class="fg full"><label>NOMENCLATURE</label><input id="fNomenclature" placeholder="Engine / Wing / Radar..."></div>
+      <div class="fg"><label>PN *</label><input id="fPN" placeholder="16WS-123456"></div>
+      <div class="fg"><label>SN *</label><input id="fSN" placeholder="SN-2024-001"></div>
+      <div class="fg full"><label>NSN *</label><input id="fNSN" placeholder="1560-00-123-4567"></div>
+      <div class="fg full"><label>الملاحظات</label><textarea id="fNotes" placeholder="ملاحظات..."></textarea></div>
+    </div>
+    <div class="upload-section">
+      <div class="upload-title">
+        <span>📎 المرفقات — صور / Word / Excel / PDF</span>
+        <span id="pendingCount" style="color:var(--muted);font-size:10px;"></span>
+      </div>
+      <div class="drop-zone" id="dropZone">
+        <div class="drop-icon">📂</div>
+        <div class="drop-text">اسحب الملفات هنا أو اضغط الزر</div>
+        <label class="file-pick-label">
+          <span>📎 اختيار ملفات</span>
+          <input type="file" id="fileInput" multiple accept="image/*,.pdf,.doc,.docx,.xls,.xlsx,.csv,.ppt,.pptx">
+        </label>
+        <div class="drop-types">🖼️ صور (تُضغط تلقائياً) • 📝 Word • 📊 Excel • 📄 PDF حتى 5MB</div>
+      </div>
+      <div class="upload-prog" id="uploadProg"><div class="upload-prog-bar" id="uploadProgBar"></div></div>
+      <div class="file-list" id="fileList"></div>
+    </div>
+    <div class="modal-acts">
+      <button class="btn-cancel" onclick="closeModal()">إلغاء</button>
+      <button class="btn btn-orange" id="modalSaveBtn" onclick="savePart()">حفظ القطعة</button>
+    </div>
+  </div>
+</div>
+
+<!-- FILES MODAL -->
+<div class="modal-ov" id="filesModal">
+  <div class="modal" style="max-width:660px;">
+    <div class="modal-title" id="filesModalTitle">📎 ملفات القطعة</div>
+    <div class="files-grid" id="filesGrid"></div>
+    <div class="modal-acts"><button class="btn-cancel" onclick="closeFilesModal()">إغلاق</button></div>
+  </div>
+</div>
+
+<!-- MAINTENANCE MODAL -->
+<div class="modal-ov" id="maintModalOv">
+  <div class="modal" style="max-width:700px;">
+    <div class="modal-title" id="maintModalTitle" style="color:var(--green)">🔧 إضافة سجل صيانة</div>
+    <div style="background:rgba(0,255,136,0.05);border:1px solid rgba(0,255,136,0.2);border-radius:8px;padding:14px;margin-bottom:16px;">
+      <div style="font-size:10px;color:var(--green);font-family:'Orbitron',sans-serif;letter-spacing:1px;margin-bottom:12px;">✈ معلومات الطائرة</div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+        <div class="fg"><label>A/C — يمين *</label><input id="mAC" placeholder="F16-501" oninput="document.getElementById('mAC2').value=this.value"></div>
+        <div class="fg"><label>A/C — يسار *</label><input id="mAC2" placeholder="F16-501" oninput="document.getElementById('mAC').value=this.value"></div>
+        <div class="fg full" style="grid-column:1/-1;">
+          <label>AIRFRAME TIME (HRS) *</label>
+          <input id="mAirframe" type="number" step="0.1" placeholder="2450.5" oninput="calcAllMaint()" style="font-size:22px;padding:14px 16px;font-family:Orbitron,sans-serif;font-weight:700;color:var(--accent);letter-spacing:2px;text-align:center;">
+        </div>
+      </div>
+      <div class="maint-item-card" id="card_75dau" style="margin-bottom:0;">
+        <div class="maint-item-header">
+          <span class="maint-item-label" id="modal_label_dau">🔩 75 HR DAU REM <span style="font-size:9px;color:var(--muted);font-family:Cairo,sans-serif;">(تلقائي من 75 HR DOWNLOAD)</span></span>
+          <span class="maint-status-badge" id="badge_75dau">—</span>
+        </div>
+        <div class="maint-item-body">
+          <div class="maint-calc-result" id="calc_75dau" style="flex:1;">أدخل ساعات 75 HR DOWNLOAD أولاً</div>
+        </div>
+      </div>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:10px;margin-bottom:16px;">
+      <div class="maint-item-card" id="card_90day">
+        <div class="maint-item-header">
+          <span class="maint-item-label" id="modal_label_90d">🗓 90 DAY — THREAT WARN / ECM & TACDS SYS CHECK</span>
+          <span class="maint-status-badge" id="badge_90day">—</span>
+        </div>
+        <div class="maint-item-body">
+          <div class="fg" style="flex:1;"><label>تاريخ آخر فحص</label><input id="m90day_date" type="date" oninput="calcMaint('90day')"></div>
+          <div class="maint-calc-result" id="calc_90day">أدخل تاريخ آخر فحص</div>
+        </div>
+      </div>
+      <div class="maint-item-card" id="card_75dl">
+        <div class="maint-item-header">
+          <span class="maint-item-label" id="modal_label_75dl">⏱ 75 HR — DOWNLOAD DATA ACQUISITION SYS</span>
+          <span class="maint-status-badge" id="badge_75dl">—</span>
+        </div>
+        <div class="maint-item-body">
+          <div class="fg" style="flex:1;"><label>ساعات آخر فحص (HRS)</label><input id="m75dl_hrs" type="number" step="0.1" placeholder="مثال: 2400.0" oninput="calcMaint('75dl')" style="font-size:22px;padding:14px 16px;font-family:Orbitron,sans-serif;font-weight:700;color:var(--accent);letter-spacing:2px;text-align:center;"></div>
+          <div class="maint-calc-result" id="calc_75dl">أدخل ساعات آخر فحص</div>
+        </div>
+      </div>
+      <div class="maint-item-card" id="card_12mo">
+        <div class="maint-item-header">
+          <span class="maint-item-label" id="modal_label_12mo">📅 12 MONTH — CLEAN BEAC BATT SWITCH / BATT TEST</span>
+          <span class="maint-status-badge" id="badge_12mo">—</span>
+        </div>
+        <div class="maint-item-body">
+          <div class="fg" style="flex:1;"><label>تاريخ آخر فحص</label><input id="m12mo_date" type="date" oninput="calcMaint('12mo')"></div>
+          <div class="maint-calc-result" id="calc_12mo">أدخل تاريخ آخر فحص</div>
+        </div>
+      </div>
+      <div class="maint-item-card" id="card_400hr">
+        <div class="maint-item-header">
+          <span class="maint-item-label" id="modal_label_400">⚙️ 400 HR — WAVEGUIDE DEHYD DESIC CARRT R2 DUE</span>
+          <span class="maint-status-badge" id="badge_400hr">—</span>
+        </div>
+        <div class="maint-item-body">
+          <div class="fg" style="flex:1;"><label>ساعات آخر فحص (HRS)</label><input id="m400hr_hrs" type="number" step="0.1" placeholder="مثال: 2200.0" oninput="calcMaint('400hr')" style="font-size:22px;padding:14px 16px;font-family:Orbitron,sans-serif;font-weight:700;color:var(--accent);letter-spacing:2px;text-align:center;"></div>
+          <div class="maint-calc-result" id="calc_400hr">أدخل ساعات آخر فحص</div>
+        </div>
+      </div>
+    </div>
+    <div class="fg" style="margin-bottom:14px;">
+      <label>NOTE — ملاحظات</label>
+      <textarea id="mNote" placeholder="ملاحظات إضافية..." style="min-height:60px;background:var(--bg);border:1px solid var(--border);color:var(--text);padding:10px 12px;border-radius:4px;font-family:'Cairo',sans-serif;font-size:13px;outline:none;width:100%;resize:vertical;"></textarea>
+    </div>
+    <div class="modal-acts">
+      <button class="btn-cancel" onclick="closeMaintModal()">إلغاء</button>
+      <button class="btn btn-green" id="maintSaveBtn" onclick="saveMaint()">حفظ السجل</button>
+    </div>
+  </div>
+</div>
+
+<!-- HEADER EDITOR MODAL -->
+<div class="modal-ov" id="headerEditorModal">
+  <div class="modal" style="max-width:680px;">
+    <div class="modal-title" style="color:var(--accent2)">✏️ تعديل عناوين الجداول — للمالك فقط</div>
+    <div class="he-section">
+      <div class="he-section-title">📋 جدول قطع الغيار</div>
+      <div class="he-grid">
+        <div class="he-item"><label>التسلسل</label><input id="he_c_seq" value="التسلسل"></div>
+        <div class="he-item"><label>الطائرة</label><input id="he_c_ac" value="الطائرة"></div>
+        <div class="he-item"><label>NOMENCLATURE</label><input id="he_c_nom" value="NOMENCLATURE"></div>
+        <div class="he-item"><label>PN</label><input id="he_c_pn" value="PN"></div>
+        <div class="he-item"><label>SN</label><input id="he_c_sn" value="SN"></div>
+        <div class="he-item"><label>NSN</label><input id="he_c_nsn" value="NSN"></div>
+        <div class="he-item"><label>الملاحظات</label><input id="he_c_notes" value="الملاحظات"></div>
+        <div class="he-item"><label>ملفات</label><input id="he_c_files" value="ملفات"></div>
+        <div class="he-item"><label>إجراءات</label><input id="he_c_acts" value="إجراءات"></div>
+      </div>
+    </div>
+    <div class="he-section">
+      <div class="he-section-title">🔧 جدول Scheduled Maintenance</div>
+      <div class="he-grid">
+        <div class="he-item"><label>A/C</label><input id="he_m_ac" value="A/C"></div>
+        <div class="he-item"><label>AIRFRAME TIME</label><input id="he_m_af" value="AIRFRAME TIME"></div>
+        <div class="he-item"><label>90 DAY CHECK</label><input id="he_m_90d" value="90 DAY THREAT WARN / ECM & TACDS SYS CHECK"></div>
+        <div class="he-item"><label>75 HR DOWNLOAD</label><input id="he_m_75dl" value="75 HR DOWNLOAD DATA ACQUISITION SYS"></div>
+        <div class="he-item"><label>12 MONTH</label><input id="he_m_12mo" value="12 MONTH CLEAN BEAC BATT SWITCH / BATT TEST"></div>
+        <div class="he-item"><label>400 HR</label><input id="he_m_400" value="400 HR WAVEGUIDE DEHYD DESIC CARRT R2 DUE"></div>
+        <div class="he-item"><label>75 HR DAU REM</label><input id="he_m_dau" value="75 HR DAU REM"></div>
+        <div class="he-item"><label>NOTE</label><input id="he_m_note" value="NOTE"></div>
+        <div class="he-item"><label>إجراءات</label><input id="he_m_acts" value="إجراءات"></div>
+      </div>
+    </div>
+    <div class="modal-acts">
+      <button class="btn-cancel" onclick="closeHeaderEditor()">إلغاء</button>
+      <button class="btn btn-orange" onclick="saveHeaderEdits()">✅ حفظ وتطبيق</button>
+      <button class="btn-ghost" onclick="resetHeaderEdits()" style="border-color:var(--muted);">↺ استعادة الافتراضي</button>
+    </div>
+  </div>
+</div>
+
+<script type="module">
+import { initializeApp }       from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import { getFirestore, collection, doc, setDoc, deleteDoc, onSnapshot, query, orderBy }
+                               from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+const FIREBASE_CONFIG = {
+  apiKey:            "AIzaSyCz08qwhHVD5CDXjQcDSLr4wMfdC5qLwHQ",
+  authDomain:        "f16-parts.firebaseapp.com",
+  projectId:         "f16-parts",
+  storageBucket:     "f16-parts.firebasestorage.app",
+  messagingSenderId: "536524787461",
+  appId:             "1:536524787461:web:c17c2e30ed88ca56b4b16c"
+};
+let OWNER_PASS = "HZ16TNB9";
+let AGENT_PASS = "HZ16TNB11";
+let APP_PASS   = "HZ16TNB";
+const MAX_FILE_MB = 5;
+
+let DB;
+let parts       = [];
+let editId      = null;
+let ownerOpen   = false;
+let agentOpen   = false;
+let pendingFiles= [];
+
+// ══════════════════════════════════
+// HELPERS
+// ══════════════════════════════════
+function uid(){ return Date.now().toString(36)+Math.random().toString(36).slice(2,7); }
+function esc(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function hl(text,q){
+  if(!q) return esc(text);
+  const e=q.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  return esc(String(text||'')).replace(new RegExp(e,'gi'),m=>`<span class="hl">${m}</span>`);
+}
+function fmtSize(b){ return b<1048576?(b/1024).toFixed(1)+'KB':(b/1048576).toFixed(1)+'MB'; }
+function fileIcon(type,name){
+  if(!type) type='';
+  if(type.startsWith('image/')) return '🖼️';
+  if(type.includes('pdf'))      return '📄';
+  if(type.includes('word')||/\.docx?$/i.test(name)) return '📝';
+  if(type.includes('excel')||/\.xlsx?$|\.csv$/i.test(name)) return '📊';
+  if(/\.pptx?$/i.test(name))   return '📑';
+  return '📎';
+}
+function toast(msg,type='info'){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.className=`show ${type}`;
+  clearTimeout(t._t); t._t=setTimeout(()=>t.className='',3400);
+}
+function setSyncState(state){
+  const b=document.getElementById('syncBadge'),d=document.getElementById('sdot'),l=document.getElementById('syncLabel');
+  b.className=state; d.className=state==='syncing'?'sdot pulse':'sdot';
+  if(state==='live')    l.textContent='متزامن ✓ Firebase';
+  if(state==='syncing') l.textContent='جارٍ الحفظ...';
+  if(state==='err')     l.textContent='خطأ في الاتصال ✗';
+}
+setInterval(()=>{
+  document.getElementById('clock').textContent=new Date().toLocaleTimeString('ar-SA',{hour:'2-digit',minute:'2-digit',second:'2-digit'});
+},1000);
+
+// ══════════════════════════════════
+// IMAGE COMPRESSION
+// ══════════════════════════════════
+function compressImage(file,maxSizeMB=0.7){
+  return new Promise(resolve=>{
+    const reader=new FileReader();
+    reader.onload=e=>{
+      const img=new Image();
+      img.onload=()=>{
+        const canvas=document.createElement('canvas');
+        let w=img.width,h=img.height;
+        const maxDim=1600;
+        if(w>maxDim||h>maxDim){ if(w>h){h=Math.round(h*maxDim/w);w=maxDim;}else{w=Math.round(w*maxDim/h);h=maxDim;} }
+        canvas.width=w; canvas.height=h;
+        canvas.getContext('2d').drawImage(img,0,0,w,h);
+        let q=0.82, dataUrl=canvas.toDataURL('image/jpeg',q);
+        while(dataUrl.length>maxSizeMB*1024*1024*1.37 && q>0.2){ q-=0.08; dataUrl=canvas.toDataURL('image/jpeg',q); }
+        resolve({dataUrl, size:Math.round(dataUrl.length*0.75)});
+      };
+      img.src=e.target.result;
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ══════════════════════════════════
+// FILE HANDLING
+// ══════════════════════════════════
+function handleFiles(fileList){
+  Array.from(fileList).forEach(async file=>{
+    if(file.type.startsWith('image/')){
+      toast('🔄 جارٍ ضغط الصورة...','info');
+      const {dataUrl,size}=await compressImage(file);
+      pendingFiles.push({id:uid(),name:file.name,type:'image/jpeg',size,data:dataUrl,uploadedAt:new Date().toISOString()});
+      renderPendingFiles();
+      toast('✅ تمت إضافة الصورة','success');
+    } else {
+      if(file.size>MAX_FILE_MB*1024*1024){ toast(`⚠️ "${file.name}" أكبر من ${MAX_FILE_MB}MB`,'error'); return; }
+      const reader=new FileReader();
+      reader.onload=e=>{
+        pendingFiles.push({id:uid(),name:file.name,type:file.type,size:file.size,data:e.target.result,uploadedAt:new Date().toISOString()});
+        renderPendingFiles();
+      };
+      reader.readAsDataURL(file);
+    }
+  });
+  document.getElementById('fileInput').value='';
+}
+
+function renderPendingFiles(){
+  document.getElementById('pendingCount').textContent=pendingFiles.length?`${pendingFiles.length} ملف`:'';
+  const list=document.getElementById('fileList');
+  if(!pendingFiles.length){list.innerHTML='';return;}
+  list.innerHTML=pendingFiles.map((f,i)=>`
+    <div class="file-item">
+      ${f.type.startsWith('image/')?`<img class="file-thumb" src="${f.data}" alt="">`:`<span class="file-icon-lg">${fileIcon(f.type,f.name)}</span>`}
+      <div class="file-info"><div class="file-name">${esc(f.name)}</div><div class="file-meta">${fmtSize(f.size)}</div></div>
+      <div class="file-actions">
+        ${f.type.startsWith('image/')?`<button class="fa-btn view" onclick="viewImg('${f.data.replace(/'/g,"\\'")}','${esc(f.name)}')">👁</button>`:''}
+        <button class="fa-btn rm" onclick="removePending(${i})">✕</button>
+      </div>
+    </div>`).join('');
+}
+window.removePending=i=>{ pendingFiles.splice(i,1); renderPendingFiles(); };
+
+function setupDragDrop(){
+  const dz=document.getElementById('dropZone');
+  dz.addEventListener('dragenter',e=>{e.preventDefault();dz.classList.add('drag-over');});
+  dz.addEventListener('dragover', e=>{e.preventDefault();dz.classList.add('drag-over');});
+  dz.addEventListener('dragleave',e=>{e.preventDefault();dz.classList.remove('drag-over');});
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('drag-over');if(e.dataTransfer.files.length)handleFiles(e.dataTransfer.files);});
+  document.getElementById('fileInput').addEventListener('change',function(){ if(this.files.length)handleFiles(this.files); });
+}
+document.addEventListener('paste',e=>{
+  if(!document.getElementById('modalOv').classList.contains('open')) return;
+  const imgs=Array.from(e.clipboardData?.items||[]).filter(i=>i.type.startsWith('image/')).map(i=>i.getAsFile());
+  if(imgs.length){handleFiles(imgs);toast('📋 تم لصق الصورة','info');}
+});
+
+// ══════════════════════════════════
+// FILES MODAL
+// ══════════════════════════════════
+window.openFilesModal=function(partId){
+  const p=parts.find(x=>x.id===partId); if(!p) return;
+  const files=p.files||[];
+  document.getElementById('filesModalTitle').textContent=`📎 ملفات: ${p.sn}`;
+  const grid=document.getElementById('filesGrid');
+  if(!files.length){
+    grid.innerHTML=`<div style="grid-column:1/-1;text-align:center;padding:30px;color:var(--muted)"><div style="font-size:36px;opacity:0.3;margin-bottom:10px">📂</div>لا توجد ملفات</div>`;
+  } else {
+    grid.innerHTML=files.map(f=>`
+      <div class="fcard">
+        ${f.type.startsWith('image/')?`<img class="fcard-img" src="${f.data}" onclick="viewImg('${f.data.replace(/'/g,"\\'")}','${esc(f.name)}')" loading="lazy">`:`<div class="fcard-icon" onclick="previewFile('${f.id}','${partId}')">${fileIcon(f.type,f.name)}</div>`}
+        <div class="fcard-name">${esc(f.name)}</div>
+        <div class="fcard-size">${fmtSize(f.size)}</div>
+        <div class="fcard-acts">
+          ${f.type.startsWith('image/')?`<button class="fa-btn view" onclick="viewImg('${f.data.replace(/'/g,"\\'")}','${esc(f.name)}')">👁</button>`:`<button class="fa-btn view" onclick="previewFile('${f.id}','${partId}')">👁</button>`}
+          <button class="fa-btn dl" onclick="downloadFile('${f.id}','${partId}')">⬇</button>
+          ${ownerOpen?`<button class="fa-btn rm" onclick="removeFile('${partId}','${f.id}')">🗑</button>`:''}
+        </div>
+      </div>`).join('');
+  }
+  document.getElementById('filesModal').classList.add('open');
+};
+window.closeFilesModal=()=>document.getElementById('filesModal').classList.remove('open');
+
+window.downloadFile=function(fileId,partId){
+  const p=parts.find(x=>x.id===partId); if(!p) return;
+  const f=(p.files||[]).find(x=>x.id===fileId); if(!f) return;
+  const a=document.createElement('a'); a.href=f.data; a.download=f.name;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  toast('📥 جارٍ التحميل: '+f.name,'info');
+};
+
+window.removeFile=async function(partId,fileId){
+  if(!confirm('حذف هذا الملف؟')) return;
+  const p=parts.find(x=>x.id===partId); if(!p) return;
+  const newFiles=(p.files||[]).filter(f=>f.id!==fileId);
+  await setDoc(doc(DB,'parts',partId),{...p,files:newFiles});
+  toast('🗑 تم حذف الملف','info');
+  openFilesModal(partId);
+};
+
+// ══════════════════════════════════
+// FILE PREVIEW
+// ══════════════════════════════════
+let fpCurrentData='', fpCurrentName='';
+window.previewFile=function(fileId,partId){
+  const p=parts.find(x=>x.id===partId); if(!p) return;
+  const f=(p.files||[]).find(x=>x.id===fileId); if(!f) return;
+  fpCurrentData=f.data; fpCurrentName=f.name;
+  document.getElementById('fpTitle').textContent=f.name;
+  const frame=document.getElementById('filePreviewFrame');
+  const unsup=document.getElementById('fpUnsupported');
+  frame.classList.remove('hidden'); frame.style.display='';
+  unsup.classList.add('hidden');
+  const type=f.type||'', name=f.name.toLowerCase();
+  if(type==='application/pdf'||name.endsWith('.pdf')){
+    frame.src=f.data;
+  } else {
+    frame.style.display='none'; unsup.classList.remove('hidden');
+    document.getElementById('fpIcon').textContent=fileIcon(type,f.name);
+    document.getElementById('fpMsg').textContent='حمّل الملف وافتحه بالتطبيق المناسب';
+  }
+  document.getElementById('filePreviewModal').classList.add('open');
+};
+window.closeFilePreview=function(){
+  document.getElementById('filePreviewModal').classList.remove('open');
+  document.getElementById('filePreviewFrame').src='';
+};
+window.fpDownload=function(){
+  if(!fpCurrentData) return;
+  const a=document.createElement('a'); a.href=fpCurrentData; a.download=fpCurrentName;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  toast('📥 جارٍ التحميل: '+fpCurrentName,'info');
+};
+
+// ══════════════════════════════════
+// IMAGE VIEWER
+// ══════════════════════════════════
+let ivScale=1,ivX=0,ivY=0,ivDragging=false,ivStartX=0,ivStartY=0,ivCurrentSrc='',ivCurrentName='';
+function ivApply(){ const img=document.getElementById('imgViewerImg'); img.style.transform=`translate(${ivX}px,${ivY}px) scale(${ivScale})`; document.getElementById('ivZoomLabel').textContent=Math.round(ivScale*100)+'%'; }
+window.ivZoom=d=>{ ivScale=Math.min(5,Math.max(0.2,ivScale+d)); ivApply(); };
+window.ivReset=()=>{ ivScale=1;ivX=0;ivY=0;ivApply(); };
+window.ivDownload=()=>{ if(!ivCurrentSrc) return; const a=document.createElement('a'); a.href=ivCurrentSrc; a.download=ivCurrentName; document.body.appendChild(a); a.click(); document.body.removeChild(a); toast('📥 جارٍ التحميل...','info'); };
+window.viewImg=function(src,name){ ivCurrentSrc=src; ivCurrentName=name; document.getElementById('imgViewerImg').src=src; document.getElementById('imgViewerName').textContent=name; ivReset(); document.getElementById('imgViewer').classList.add('open'); };
+window.closeImgViewer=function(){ document.getElementById('imgViewer').classList.remove('open'); ivReset(); };
+const ivWrap=document.getElementById('imgViewerWrap');
+ivWrap.addEventListener('mousedown',e=>{ if(e.button!==0)return; ivDragging=true; ivStartX=e.clientX-ivX; ivStartY=e.clientY-ivY; ivWrap.classList.add('grabbing'); });
+window.addEventListener('mousemove',e=>{ if(!ivDragging)return; ivX=e.clientX-ivStartX; ivY=e.clientY-ivStartY; ivApply(); });
+window.addEventListener('mouseup',()=>{ ivDragging=false; ivWrap.classList.remove('grabbing'); });
+let ivLastDist=0;
+ivWrap.addEventListener('touchstart',e=>{ if(e.touches.length===1){ivDragging=true;ivStartX=e.touches[0].clientX-ivX;ivStartY=e.touches[0].clientY-ivY;}else if(e.touches.length===2){ivDragging=false;ivLastDist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);}},{passive:true});
+ivWrap.addEventListener('touchmove',e=>{ e.preventDefault(); if(e.touches.length===1&&ivDragging){ivX=e.touches[0].clientX-ivStartX;ivY=e.touches[0].clientY-ivStartY;ivApply();}else if(e.touches.length===2){const dist=Math.hypot(e.touches[0].clientX-e.touches[1].clientX,e.touches[0].clientY-e.touches[1].clientY);if(ivLastDist>0){ivScale=Math.min(5,Math.max(0.2,ivScale*(dist/ivLastDist)));ivApply();}ivLastDist=dist;}},{passive:false});
+ivWrap.addEventListener('touchend',()=>{ivDragging=false;ivLastDist=0;},{passive:true});
+let ivLastTap=0; ivWrap.addEventListener('touchend',e=>{const now=Date.now();if(now-ivLastTap<300)ivReset();ivLastTap=now;},{passive:true});
+ivWrap.addEventListener('wheel',e=>{e.preventDefault();ivZoom(e.deltaY<0?0.15:-0.15);},{passive:false});
+document.getElementById('imgViewer').addEventListener('click',e=>{if(e.target===e.currentTarget)closeImgViewer();});
+
+// ══════════════════════════════════
+// STATS
+// ══════════════════════════════════
+function updateStats(){
+  document.getElementById('sTotal').textContent=parts.length;
+  document.getElementById('sAircraft').textContent=new Set(parts.map(p=>p.aircraft_no).filter(Boolean)).size;
+  document.getElementById('sMfg').textContent=new Set(parts.map(p=>p.nomenclature).filter(Boolean)).size;
+  const sel=document.getElementById('vAC'),cur=sel.value;
+  sel.innerHTML='<option value="">الكل</option>';
+  [...new Set(parts.map(p=>p.aircraft_no).filter(Boolean))].sort().forEach(ac=>{
+    const o=document.createElement('option'); o.value=ac; o.textContent=ac;
+    if(ac===cur) o.selected=true; sel.appendChild(o);
+  });
+}
+
+// ══════════════════════════════════
+// FILE BADGE
+// ══════════════════════════════════
+function fileBadge(p){
+  const files=p.files||[];
+  if(!files.length) return (ownerOpen||agentOpen)?`<button class="file-badge" onclick="openFilesModal('${p.id}')">📎 إضافة</button>`:`<span style="color:var(--muted);font-size:10px">—</span>`;
+  const hasImg=files.some(f=>f.type.startsWith('image/'));
+  return `<button class="file-badge" onclick="openFilesModal('${p.id}')">${hasImg?'🖼️':'📎'} <span class="file-count">${files.length}</span></button>`;
+}
+
+// ══════════════════════════════════
+// SEARCH & RENDER
+// ══════════════════════════════════
+window.doSearch=function(mode){
+  const fieldId={v:'vField',ag:'agField',o:'oField'}[mode];
+  const queryId={v:'vQuery',ag:'agQuery',o:'oQuery'}[mode];
+  const field=document.getElementById(fieldId).value;
+  const q=document.getElementById(queryId).value.trim().toLowerCase();
+  const ac=mode==='v'?document.getElementById('vAC').value:'';
+  let data=parts;
+  if(ac) data=data.filter(p=>p.aircraft_no===ac);
+  if(q)  data=data.filter(p=>field==='all'?Object.entries(p).filter(([k])=>k!=='files').some(([,v])=>String(v).toLowerCase().includes(q)):String(p[field]||'').toLowerCase().includes(q));
+  renderTable(mode, data, q);
+};
+
+function renderTable(mode, data, q){
+  const bodyId={v:'vBody',ag:'agBody',o:'oBody'}[mode];
+  const countId={v:'vCount',ag:'agCount',o:'oCount'}[mode];
+  if(mode==='v') document.getElementById('sResults').textContent=data.length;
+  document.getElementById(countId).textContent=data.length+' سجل';
+  const tb=document.getElementById(bodyId);
+  const cols=(mode==='o'||mode==='ag')?10:9;
+  if(!data.length){tb.innerHTML=`<tr><td colspan="${cols}"><div class="empty"><div class="empty-icon">🔍</div>لا توجد نتائج</div></td></tr>`;return;}
+  tb.innerHTML=data.map((p,i)=>`<tr>
+    <td class="c-seq">${i+1}</td>
+    <td class="c-seq">${hl(p.sequence,q)}</td>
+    <td><span class="c-ac">${hl(p.aircraft_no,q)}</span></td>
+    <td>${hl(p.nomenclature,q)}</td>
+    <td class="c-code">${hl(p.pn,q)}</td>
+    <td class="c-code">${hl(p.sn,q)}</td>
+    <td class="c-nsn">${hl(p.nsn,q)}</td>
+    <td class="c-note" title="${esc(p.notes)}">${hl(p.notes,q)}</td>
+    <td>${fileBadge(p)}</td>
+    ${mode==='o'?`<td><div class="acts"><button class="btn-edit" onclick="openEdit('${p.id}')">✏️</button><button class="btn-del" onclick="deletePart('${p.id}')">🗑</button></div></td>`:''}
+    ${mode==='ag'?`<td><div class="acts"><button class="btn-edit" onclick="openEdit('${p.id}')">✏️ تعديل</button></div></td>`:''}
+  </tr>`).join('');
+}
+
+window.clearSearch=function(mode){
+  document.getElementById({v:'vQuery',ag:'agQuery',o:'oQuery'}[mode]).value='';
+  document.getElementById({v:'vField',ag:'agField',o:'oField'}[mode]).value='all';
+  if(mode==='v') document.getElementById('vAC').value='';
+  doSearch(mode);
+};
+
+// ══════════════════════════════════
+// PAGES / LOCK
+// ══════════════════════════════════
+window.showPage=function(p){
+  ['viewerPage','agentPage','ownerPage','maintPage','podPage'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  ['tab-viewer','tab-agent','tab-owner','tab-maint','tab-pod'].forEach(id=>document.getElementById(id).classList.remove('active'));
+  document.getElementById(p+'Page').classList.add('active');
+  document.getElementById('tab-'+p).classList.add('active');
+  if(p==='maint') renderMaint();
+  else if(p==='pod') renderPod();
+  else refreshAll();
+};
+
+window.requestOwner=function(){
+  if(ownerOpen){showPage('owner');return;}
+  document.getElementById('lockScreen').classList.remove('hidden');
+  document.getElementById('lockInput').value='';
+  document.getElementById('lockErr').style.display='none';
+  setTimeout(()=>document.getElementById('lockInput').focus(),120);
+};
+window.checkPass=function(){
+  if(document.getElementById('lockInput').value===OWNER_PASS){
+    ownerOpen=true; agentOpen=false;
+    document.getElementById('lockScreen').classList.add('hidden');
+    showPage('owner'); toast('✅ مرحباً — وضع المالك','success');
+  } else {
+    document.getElementById('lockErr').style.display='block';
+    document.getElementById('lockInput').value=''; document.getElementById('lockInput').focus();
+  }
+};
+window.cancelLock=()=>document.getElementById('lockScreen').classList.add('hidden');
+
+window.requestAgent=function(){
+  if(agentOpen){showPage('agent');return;}
+  document.getElementById('agentLockScreen').classList.remove('hidden');
+  document.getElementById('agentLockInput').value='';
+  document.getElementById('agentLockErr').style.display='none';
+  setTimeout(()=>document.getElementById('agentLockInput').focus(),120);
+};
+window.checkAgentPass=function(){
+  if(document.getElementById('agentLockInput').value===AGENT_PASS){
+    agentOpen=true;
+    document.getElementById('agentLockScreen').classList.add('hidden');
+    showPage('agent'); toast('✅ مرحباً — وضع الوكيل (إضافة فقط)','success');
+  } else {
+    document.getElementById('agentLockErr').style.display='block';
+    document.getElementById('agentLockInput').value=''; document.getElementById('agentLockInput').focus();
+  }
+};
+window.cancelAgentLock=()=>document.getElementById('agentLockScreen').classList.add('hidden');
+
+// ══════════════════════════════════
+// MODAL
+// ══════════════════════════════════
+window.openAdd=function(){
+  editId=null; pendingFiles=[];
+  document.getElementById('modalTitle').textContent='＋ إضافة قطعة غيار';
+  document.getElementById('modalSaveBtn').textContent='حفظ القطعة';
+  ['SN','PN','NSN','Nomenclature','Seq','AC','Notes'].forEach(f=>document.getElementById('f'+f).value='');
+  document.getElementById('fSeq2').value=''; document.getElementById('fAC2').value='';
+  document.getElementById('fileList').innerHTML=''; document.getElementById('pendingCount').textContent='';
+  document.getElementById('modalOv').classList.add('open');
+};
+window.openEdit=function(id){
+  if(!ownerOpen&&!agentOpen){ toast('⚠️ يحتاج صلاحية وكيل أو مالك','error'); return; }
+  const p=parts.find(x=>x.id===id); if(!p) return;
+  editId=id; pendingFiles=[];
+  document.getElementById('modalTitle').textContent='✏️ تعديل قطعة الغيار';
+  document.getElementById('modalSaveBtn').textContent='حفظ التعديلات';
+  document.getElementById('fSN').value=p.sn||''; document.getElementById('fPN').value=p.pn||'';
+  document.getElementById('fNSN').value=p.nsn||''; document.getElementById('fNomenclature').value=p.nomenclature||'';
+  document.getElementById('fSeq').value=p.sequence||''; document.getElementById('fSeq2').value=p.sequence||'';
+  document.getElementById('fAC').value=p.aircraft_no||''; document.getElementById('fAC2').value=p.aircraft_no||'';
+  document.getElementById('fNotes').value=p.notes||'';
+  const existing=p.files||[];
+  const list=document.getElementById('fileList');
+  list.innerHTML=existing.length
+    ?`<div style="font-size:10px;color:var(--purple);margin-bottom:6px;letter-spacing:1px;">الملفات الحالية (${existing.length})</div>`
+      +existing.map(f=>`<div class="file-item">
+        ${f.type.startsWith('image/')?`<img class="file-thumb" src="${f.data}" loading="lazy">`:`<span class="file-icon-lg">${fileIcon(f.type,f.name)}</span>`}
+        <div class="file-info"><div class="file-name">${esc(f.name)}</div><div class="file-meta">${fmtSize(f.size)}</div></div>
+        <div class="file-actions">
+          ${f.type.startsWith('image/')?`<button class="fa-btn view" onclick="viewImg('${f.data.replace(/'/g,"\\'")}','${esc(f.name)}')">👁</button>`:''}
+          <button class="fa-btn rm" onclick="removeFile('${id}','${f.id}')">✕</button>
+        </div></div>`).join('')
+    :'';
+  document.getElementById('pendingCount').textContent='';
+  document.getElementById('modalOv').classList.add('open');
+};
+window.closeModal=function(){ document.getElementById('modalOv').classList.remove('open'); editId=null; pendingFiles=[]; };
+
+window.savePart=async function(){
+  const sn=document.getElementById('fSN').value.trim(), pn=document.getElementById('fPN').value.trim();
+  const nsn=document.getElementById('fNSN').value.trim(), nomenclature=document.getElementById('fNomenclature').value.trim();
+  const sequence=document.getElementById('fSeq').value.trim(), aircraft_no=document.getElementById('fAC').value.trim();
+  const notes=document.getElementById('fNotes').value.trim();
+  if(!sn||!pn||!nsn||!aircraft_no){toast('⚠️ الحقول المطلوبة (*)','error');return;}
+  const wasEdit=!!editId;
+  const pid=editId||uid();
+  const existing=wasEdit?(parts.find(x=>x.id===pid)?.files||[]):[];
+  const allFiles=[...existing,...pendingFiles];
+  const partData={sn,pn,nsn,nomenclature,sequence,aircraft_no,notes,files:allFiles,
+    createdAt:wasEdit?(parts.find(x=>x.id===pid)?.createdAt||Date.now()):Date.now(),updatedAt:Date.now()};
+  setSyncState('syncing');
+  try{
+    await setDoc(doc(DB,'parts',pid),partData);
+    closeModal();
+    toast(wasEdit?'✅ تم التحديث':'✅ تمت الإضافة','success');
+  }catch(e){ toast('❌ فشل الحفظ: '+e.message,'error'); setSyncState('err'); }
+};
+
+window.deletePart=async function(id){
+  if(!ownerOpen) return;
+  if(!confirm('حذف هذه القطعة وجميع ملفاتها؟')) return;
+  try{ await deleteDoc(doc(DB,'parts',id)); toast('🗑 تم الحذف','info'); }
+  catch(e){ toast('❌ فشل الحذف','error'); }
+};
+
+// ══════════════════════════════════
+// EXPORT
+// ══════════════════════════════════
+window.exportCSV=function(){
+  const h=['التسلسل','رقم الطائرة','NOMENCLATURE','PN','SN','NSN','الملاحظات','عدد الملفات'];
+  const rows=parts.map(p=>[p.sequence,p.aircraft_no,p.nomenclature,p.pn,p.sn,p.nsn,p.notes,(p.files||[]).length]
+    .map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(','));
+  const csv='\uFEFF'+[h.join(','),...rows].join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='F16_Parts_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click(); toast('📥 تم التصدير','success');
+};
+
+// ══════════════════════════════════
+// REFRESH
+// ══════════════════════════════════
+function refreshAll(){
+  updateStats();
+  doSearch('v');
+  if(agentOpen) doSearch('ag');
+  if(ownerOpen) doSearch('o');
+}
+
+// ══════════════════════════════════
+// FIREBASE INIT
+// ══════════════════════════════════
+async function startApp(){
+  try{
+    const app=initializeApp(FIREBASE_CONFIG);
+    DB=getFirestore(app);
+    const q=query(collection(DB,'parts'),orderBy('createdAt','asc'));
+    onSnapshot(q, snapshot=>{
+      parts=snapshot.docs.map(d=>({id:d.id,...d.data()}));
+      setSyncState('live'); refreshAll();
+    }, err=>{ setSyncState('err'); console.error(err); });
+    document.getElementById('loadingScreen').classList.add('hidden');
+    setupDragDrop();
+
+    // تحميل كلمات المرور المحفوظة من Firestore
+    (async()=>{
+      try{
+        const {getDoc,doc:fsDoc}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+        const s=await getDoc(fsDoc(DB,'app_config','passwords'));
+        if(s.exists()){
+          const d=s.data();
+          if(d.ownerPass) OWNER_PASS=d.ownerPass;
+          if(d.agentPass) AGENT_PASS=d.agentPass;
+          if(d.appPass){ APP_PASS=d.appPass; _entryPass=d.appPass; }
+        }
+      }catch(e){ console.warn('passwords load:',e); }
+    })();
+
+    onSnapshot(doc(DB,'maintenance','pod_records'), snap=>{
+      if(snap.exists()){ podRecords=snap.data().data||[]; }
+      else { podRecords=[]; }
+      if(document.getElementById('podPage').classList.contains('active')) renderPod();
+    });
+
+    onSnapshot(doc(DB,'maintenance','records'), async snap=>{
+      if(snap.exists()){ maintRecords=snap.data().data||[]; }
+      else { maintRecords=[]; }
+      const didChange=migrateMaintRecords();
+      if(didChange){ await saveMaintStore(); }
+      if(document.getElementById('maintPage').classList.contains('active')) renderMaint();
+    });
+  }catch(err){
+    document.getElementById('loadingScreen').classList.add('hidden');
+    setSyncState('err'); toast('❌ فشل الاتصال بـ Firebase','error');
+    console.error(err);
+  }
+}
+
+// ══════════════════════════════════
+// SECRET TAP
+// ══════════════════════════════════
+let tapCount=0, tapTimer=null;
+window.handleSecretTap=function(){
+  tapCount++;
+  clearTimeout(tapTimer);
+  const icon=document.getElementById('secretTap');
+  icon.style.opacity='0.5';
+  setTimeout(()=>icon.style.opacity='1', 120);
+  if(tapCount===5){
+    document.getElementById('tab-agent').classList.remove('hidden');
+    document.getElementById('tab-owner').classList.remove('hidden');
+    tapCount=0;
+    requestOwner();
+    return;
+  }
+  tapTimer=setTimeout(()=>{
+    if(tapCount===3){
+      document.getElementById('tab-agent').classList.remove('hidden');
+      requestAgent();
+    }
+    tapCount=0;
+  }, 1500);
+};
+
+// ══════════════════════════════════
+// MAINTENANCE
+// ══════════════════════════════════
+let maintRecords = [];
+let maintEditId  = null;
+
+async function saveMaintStore(){
+  try{
+    await setDoc(doc(DB,'maintenance','records'),{data:maintRecords,updatedAt:Date.now()});
+  }catch(e){ toast('⚠️ فشل حفظ سجلات الصيانة','error'); }
+}
+
+function calcHrStatus(lastHrs,currentHrs,intervalHrs){
+  if(!lastHrs||!currentHrs) return null;
+  const last=parseFloat(lastHrs),current=parseFloat(currentHrs),nextDue=last+intervalHrs,remaining=nextDue-current;
+  const warnAt=intervalHrs*0.1;
+  let status,detail;
+  if(remaining<0){status='OVERDUE';detail=`الموعد كان: ${nextDue.toFixed(1)} HRS\nمتأخر بـ: ${Math.abs(remaining).toFixed(1)} HRS ❌`;}
+  else if(remaining<=warnAt){status='DUE';detail=`القادم: ${nextDue.toFixed(1)} HRS\nمتبقي: ${remaining.toFixed(1)} HRS ⚠️`;}
+  else{status='DONE';detail=`القادم: ${nextDue.toFixed(1)} HRS\nمتبقي: ${remaining.toFixed(1)} HRS ✓`;}
+  return{status,detail,nextDue:nextDue.toFixed(1),remaining:remaining.toFixed(1)};
+}
+
+function calcDayStatus(lastDateStr,intervalDays){
+  if(!lastDateStr) return null;
+  const lastDate=new Date(lastDateStr),today=new Date();
+  today.setHours(0,0,0,0);
+  const nextDue=new Date(lastDate);
+  nextDue.setDate(nextDue.getDate()+intervalDays);
+  const diffDays=Math.round((nextDue-today)/86400000);
+  const warnAt=Math.round(intervalDays*0.1);
+  const nextStr=nextDue.toLocaleDateString('ar-SA');
+  let status,detail;
+  if(diffDays<0){status='OVERDUE';detail=`موعد كان: ${nextStr}\nمتأخر بـ: ${Math.abs(diffDays)} يوم ❌`;}
+  else if(diffDays<=warnAt){status='DUE';detail=`القادم: ${nextStr}\nمتبقي: ${diffDays} يوم ⚠️`;}
+  else{status='DONE';detail=`القادم: ${nextStr}\nمتبقي: ${diffDays} يوم ✓`;}
+  return{status,detail,nextDue:nextStr,remaining:diffDays};
+}
+
+function calc75dauStatus(dl75Hrs, airframeHrs){
+  if(dl75Hrs===''||dl75Hrs===null||dl75Hrs===undefined||airframeHrs===''||airframeHrs===null||airframeHrs===undefined) return null;
+  const dl=parseFloat(dl75Hrs), af=parseFloat(airframeHrs);
+  if(isNaN(dl)||isNaN(af)) return null;
+  const diff=dl-af;
+  const diffStr=diff.toFixed(1);
+  let status,detail;
+  if(diff<0){status='OVERDUE';detail=`AIRFRAME: ${af.toFixed(1)} HRS\n75 HR DL: ${dl.toFixed(1)} HRS\nالفرق: ${diffStr} HRS ❌`;}
+  else if(diff<=7.5){status='DUE';detail=`AIRFRAME: ${af.toFixed(1)} HRS\n75 HR DL: ${dl.toFixed(1)} HRS\nالفرق: ${diffStr} HRS ⚠️`;}
+  else{status='DONE';detail=`AIRFRAME: ${af.toFixed(1)} HRS\n75 HR DL: ${dl.toFixed(1)} HRS\nالفرق: ${diffStr} HRS ✓`;}
+  return{status,detail,diff:diffStr};
+}
+
+function migrateMaintRecords(){
+  let changed=false;
+  maintRecords=maintRecords.map(r=>{
+    const dl75Last=r.v75dl?.lastVal||'';
+    const airframe=r.airframe||'';
+    if(!dl75Last||!airframe) return r;
+    const newDau=calc75dauStatus(dl75Last, airframe);
+    if(!newDau) return r;
+    const updated={lastVal:dl75Last,status:newDau.status,diff:newDau.diff};
+    const old=r.v75dau||{};
+    if(old.diff!==updated.diff||old.status!==updated.status){ changed=true; return {...r, v75dau: updated}; }
+    return r;
+  });
+  return changed;
+}
+
+window.calcMaint=function(key){
+  const currentHrs=parseFloat(document.getElementById('mAirframe').value)||0;
+  let result=null;
+  if(key==='90day'){result=calcDayStatus(document.getElementById('m90day_date').value,90);}
+  else if(key==='75dl'){result=calcHrStatus(document.getElementById('m75dl_hrs').value,currentHrs,75);setTimeout(()=>calcMaint('75dau'),0);}
+  else if(key==='12mo'){result=calcDayStatus(document.getElementById('m12mo_date').value,365);}
+  else if(key==='400hr'){result=calcHrStatus(document.getElementById('m400hr_hrs').value,currentHrs,400);}
+  else if(key==='75dau'){
+    const dl75Last=document.getElementById('m75dl_hrs').value;
+    result=calc75dauStatus(dl75Last, currentHrs);
+    const badge=document.getElementById('badge_75dau'),calcEl=document.getElementById('calc_75dau'),card=document.getElementById('card_75dau');
+    if(!result){badge.textContent='—';badge.className='maint-status-badge';calcEl.textContent='أدخل ساعات 75 HR DOWNLOAD أولاً';card.className='maint-item-card';return;}
+    badge.textContent={DONE:'✅ DONE',DUE:'⚠️ DUE',OVERDUE:'❌ OVERDUE'}[result.status];
+    badge.className='maint-status-badge '+result.status;
+    calcEl.textContent=result.detail;
+    card.className='maint-item-card status-'+result.status;
+    return;
+  }
+  const badge=document.getElementById('badge_'+key),calcEl=document.getElementById('calc_'+key),card=document.getElementById('card_'+key);
+  if(!result){badge.textContent='—';badge.className='maint-status-badge';calcEl.textContent='أدخل البيانات للحساب التلقائي';card.className='maint-item-card';return;}
+  badge.textContent={DONE:'✅ DONE',DUE:'⚠️ DUE',OVERDUE:'❌ OVERDUE'}[result.status];
+  badge.className='maint-status-badge '+result.status;
+  calcEl.textContent=result.detail;
+  card.className='maint-item-card status-'+result.status;
+};
+window.calcAllMaint=function(){ ['90day','75dl','12mo','400hr','75dau'].forEach(k=>calcMaint(k)); };
+
+function getMaintItemData(key){
+  const currentHrs=parseFloat(document.getElementById('mAirframe').value)||0;
+  let r=null,lastVal='';
+  if(key==='90day'){lastVal=document.getElementById('m90day_date').value;r=calcDayStatus(lastVal,90);}
+  else if(key==='75dl'){lastVal=document.getElementById('m75dl_hrs').value;r=calcHrStatus(lastVal,currentHrs,75);}
+  else if(key==='12mo'){lastVal=document.getElementById('m12mo_date').value;r=calcDayStatus(lastVal,365);}
+  else if(key==='400hr'){lastVal=document.getElementById('m400hr_hrs').value;r=calcHrStatus(lastVal,currentHrs,400);}
+  else if(key==='75dau'){lastVal=document.getElementById('m75dl_hrs').value;r=calc75dauStatus(lastVal,currentHrs);}
+  return{lastVal,status:r?.status||'',diff:r?.diff||''};
+}
+
+function renderMaint(){
+  const acts=document.getElementById('maintActs');
+  if(ownerOpen||agentOpen){
+    acts.innerHTML=`<button class="btn btn-green" onclick="openMaintModal()">＋ إضافة سجل</button>`
+      +(ownerOpen?`<button class="btn-ghost" onclick="exportMaintCSV()">📥 CSV</button>`:'');
+  } else { acts.innerHTML=''; }
+  const tb=document.getElementById('maintBody');
+  if(!maintRecords.length){
+    tb.innerHTML=`<tr><td colspan="10"><div class="empty"><div class="empty-icon">🔧</div>لا توجد سجلات</div></td></tr>`;
+    return;
+  }
+  tb.innerHTML=maintRecords.map((r,i)=>`<tr>
+    <td><span class="maint-ac">${esc(r.ac)}</span></td>
+    <td><span class="maint-airframe">${esc(r.airframe)}<span style="font-size:9px;color:var(--muted);margin-right:3px;">HRS</span></span></td>
+    <td>${maintCellDau(r)}</td>
+    <td>${maintCell(r.v90day)}</td>
+    <td>${maintCell75dl(r.v75dl)}</td>
+    <td>${maintCell(r.v12mo)}</td>
+    <td>${maintCell(r.v400hr)}</td>
+    <td class="maint-note" title="${esc(r.note)}">${esc(r.note)}</td>
+    <td><div class="acts">
+      ${(ownerOpen||agentOpen)?`<button class="btn-edit" onclick="editMaint('${r.id}')">✏️</button>`:''}
+      ${ownerOpen?`<button class="btn-del" onclick="deleteMaint('${r.id}')">🗑</button>`:''}
+      ${(!ownerOpen&&!agentOpen)?'<span style="color:var(--muted);font-size:10px">—</span>':''}
+    </div></td>
+    <td><span class="maint-ac">${esc(r.ac)}</span></td>
+  </tr>`).join('');
+}
+
+function maintCell(d){
+  if(!d||!d.status) return `<span style="color:var(--muted);font-size:11px">—</span>`;
+  const colors={DONE:'var(--green)',DUE:'var(--yellow)',OVERDUE:'var(--red)'};
+  const badges={DONE:'✅ DONE',DUE:'⚠️ DUE',OVERDUE:'❌ OVERDUE'};
+  return `<div style="display:flex;flex-direction:column;gap:3px;min-width:100px;font-family:'Cairo',sans-serif;">
+    <span style="font-size:13px;font-weight:700;color:var(--text);">${esc(d.lastVal||'—')}</span>
+    <span style="font-size:11px;font-weight:700;color:${colors[d.status]};">${badges[d.status]}</span>
+  </div>`;
+}
+function maintCell75dl(d){
+  if(!d||!d.lastVal) return `<span style="color:var(--muted);font-size:11px">—</span>`;
+  return `<div style="display:flex;flex-direction:column;gap:1px;font-family:'Cairo',sans-serif;">
+    <span style="font-size:14px;font-weight:700;color:var(--text);">${esc(d.lastVal)}</span>
+    <span style="font-size:10px;color:var(--muted);">HRS</span>
+  </div>`;
+}
+function maintCellDau(r){
+  const afRaw=r.airframe,dlRaw=r.v75dl?.lastVal;
+  if(!afRaw&&afRaw!==0) return `<span style="color:var(--muted);font-size:10px">—</span>`;
+  if(!dlRaw&&dlRaw!==0) return `<span style="color:var(--muted);font-size:10px">—</span>`;
+  const af=parseFloat(afRaw),dl=parseFloat(dlRaw);
+  if(isNaN(af)||isNaN(dl)) return `<span style="color:var(--muted);font-size:10px">—</span>`;
+  const diff=dl-af,diffStr=(diff>=0?'+':'')+diff.toFixed(1);
+  let color,icon;
+  if(diff<0){color='var(--red)';icon='❌';}
+  else if(diff<=7.5){color='var(--yellow)';icon='⚠️';}
+  else{color='var(--green)';icon='✅';}
+  return `<div style="display:flex;flex-direction:column;gap:3px;min-width:80px;align-items:center;text-align:center;font-family:'Cairo',sans-serif;">
+    <span style="font-size:20px;font-weight:900;color:${color};line-height:1;">${diffStr}</span>
+    <span style="font-size:10px;color:var(--muted);">HRS</span>
+    <span style="font-size:13px;color:${color};">${icon}</span>
+  </div>`;
+}
+
+window.openMaintModal=function(){
+  if(!ownerOpen&&!agentOpen){ toast('⚠️ يحتاج صلاحية وكيل أو مالك','error'); return; }
+  maintEditId=null;
+  document.getElementById('maintModalTitle').textContent='🔧 إضافة سجل صيانة';
+  document.getElementById('maintSaveBtn').textContent='حفظ السجل';
+  document.getElementById('mAC').value=''; document.getElementById('mAC2').value='';
+  document.getElementById('mAirframe').value='';
+  document.getElementById('m90day_date').value=''; document.getElementById('m75dl_hrs').value='';
+  document.getElementById('m12mo_date').value=''; document.getElementById('m400hr_hrs').value='';
+  document.getElementById('mNote').value='';
+  ['90day','75dl','12mo','400hr','75dau'].forEach(k=>{
+    document.getElementById('badge_'+k).textContent='—';
+    document.getElementById('badge_'+k).className='maint-status-badge';
+    document.getElementById('calc_'+k).textContent='أدخل البيانات للحساب التلقائي';
+    document.getElementById('card_'+k).className='maint-item-card';
+  });
+  document.getElementById('maintModalOv').classList.add('open');
+};
+window.editMaint=function(id){
+  if(!ownerOpen&&!agentOpen){ toast('⚠️ يحتاج صلاحية وكيل أو مالك','error'); return; }
+  const r=maintRecords.find(x=>x.id===id); if(!r) return;
+  maintEditId=id;
+  document.getElementById('maintModalTitle').textContent='✏️ تعديل سجل الصيانة';
+  document.getElementById('maintSaveBtn').textContent='حفظ التعديلات';
+  document.getElementById('mAC').value=r.ac||''; document.getElementById('mAC2').value=r.ac||'';
+  document.getElementById('mAirframe').value=r.airframe||'';
+  document.getElementById('m90day_date').value=r.v90day?.lastVal||'';
+  document.getElementById('m75dl_hrs').value=r.v75dl?.lastVal||'';
+  document.getElementById('m12mo_date').value=r.v12mo?.lastVal||'';
+  document.getElementById('m400hr_hrs').value=r.v400hr?.lastVal||'';
+  document.getElementById('mNote').value=r.note||'';
+  document.getElementById('maintModalOv').classList.add('open');
+  setTimeout(calcAllMaint,100);
+};
+window.closeMaintModal=()=>{ document.getElementById('maintModalOv').classList.remove('open'); maintEditId=null; };
+
+window.saveMaint=async function(){
+  const ac=document.getElementById('mAC').value.trim();
+  const airframe=document.getElementById('mAirframe').value.trim();
+  if(!ac||!airframe){toast('⚠️ أدخل رقم الطائرة والساعات الحالية','error');return;}
+  const rec={
+    id:maintEditId||uid(), ac, airframe,
+    v90day:getMaintItemData('90day'),v75dl:getMaintItemData('75dl'),
+    v12mo:getMaintItemData('12mo'),v400hr:getMaintItemData('400hr'),
+    v75dau:getMaintItemData('75dau'),
+    note:document.getElementById('mNote').value.trim(),updatedAt:Date.now()
+  };
+  if(maintEditId){ const idx=maintRecords.findIndex(x=>x.id===maintEditId); if(idx!==-1) maintRecords[idx]=rec; }
+  else { maintRecords.push(rec); }
+  await saveMaintStore();
+  closeMaintModal(); renderMaint();
+  toast(maintEditId?'✅ تم تحديث السجل':'✅ تمت الإضافة','success');
+};
+window.deleteMaint=async function(id){
+  if(!ownerOpen){ toast('⚠️ الحذف للمالك فقط','error'); return; }
+  if(!confirm('حذف هذا السجل؟')) return;
+  maintRecords=maintRecords.filter(x=>x.id!==id);
+  await saveMaintStore(); renderMaint();
+  toast('🗑 تم الحذف','info');
+};
+window.exportMaintCSV=function(){
+  const h=['A/C','AIRFRAME HRS','90 DAY STATUS','90 DAY NEXT','75 HR DL STATUS','75 HR DL NEXT','12 MONTH STATUS','12 MONTH NEXT','400 HR STATUS','400 HR NEXT','75 HR DAU STATUS','75 HR DAU NEXT','NOTE'];
+  const rows=maintRecords.map(r=>[
+    r.ac,r.airframe,
+    r.v90day?.status||'',r.v90day?.nextDue||'',r.v75dl?.status||'',r.v75dl?.nextDue||'',
+    r.v12mo?.status||'',r.v12mo?.nextDue||'',r.v400hr?.status||'',r.v400hr?.nextDue||'',
+    r.v75dau?.status||'',r.v75dau?.nextDue||'',r.note
+  ].map(v=>`"${String(v||'').replace(/"/g,'""')}"`).join(','));
+  const csv='\uFEFF'+[h.join(','),...rows].join('\n');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));
+  a.download='F16_Maintenance_'+new Date().toISOString().slice(0,10)+'.csv';
+  a.click(); toast('📥 تم التصدير','success');
+};
+
+// ══════════════════════════════════
+// HEADER EDITOR
+// ══════════════════════════════════
+const DEFAULT_HEADERS = {
+  c_seq:'التسلسل', c_ac:'الطائرة', c_nom:'NOMENCLATURE', c_pn:'PN',
+  c_sn:'SN', c_nsn:'NSN', c_notes:'الملاحظات', c_files:'ملفات', c_acts:'إجراءات',
+  m_ac:'A/C', m_af:'AIRFRAME TIME',
+  m_90d:'90 DAY THREAT WARN / ECM & TACDS SYS CHECK',
+  m_75dl:'75 HR DOWNLOAD DATA ACQUISITION SYS',
+  m_12mo:'12 MONTH CLEAN BEAC BATT SWITCH / BATT TEST',
+  m_400:'400 HR WAVEGUIDE DEHYD DESIC CARRT R2 DUE',
+  m_dau:'75 HR DAU REM', m_note:'NOTE', m_acts:'إجراءات', m_ac_end:'A/C'
+};
+let currentHeaders = {...DEFAULT_HEADERS};
+
+function applyHeaders(){
+  document.querySelectorAll('th[data-col]').forEach(th=>{
+    const key=th.getAttribute('data-col');
+    if(currentHeaders[key]) th.textContent=currentHeaders[key];
+  });
+  const labelMap={m_90d:'modal_label_90d',m_75dl:'modal_label_75dl',m_12mo:'modal_label_12mo',m_400:'modal_label_400',m_dau:'modal_label_dau'};
+  Object.entries(labelMap).forEach(([hKey,elId])=>{
+    const el=document.getElementById(elId);
+    if(el&&currentHeaders[hKey]){
+      const icon=el.textContent.trim().charAt(0);
+      const sub=el.querySelector('span');
+      el.innerHTML=icon+' '+currentHeaders[hKey]+(sub?` <span style="font-size:9px;color:var(--muted);font-family:Cairo,sans-serif;">${sub.textContent}</span>`:'');
+    }
+  });
+}
+function loadSavedHeaders(){
+  try{ const saved=localStorage.getItem('f16_headers'); if(saved) currentHeaders={...DEFAULT_HEADERS,...JSON.parse(saved)}; }catch(e){}
+  applyHeaders();
+}
+window.openHeaderEditor=function(){
+  if(!ownerOpen){toast('⚠️ للمالك فقط','error');return;}
+  Object.keys(currentHeaders).forEach(k=>{ const el=document.getElementById('he_'+k); if(el) el.value=currentHeaders[k]; });
+  document.getElementById('headerEditorModal').classList.add('open');
+};
+window.closeHeaderEditor=()=>document.getElementById('headerEditorModal').classList.remove('open');
+window.saveHeaderEdits=function(){
+  Object.keys(DEFAULT_HEADERS).forEach(k=>{ const el=document.getElementById('he_'+k); if(el&&el.value.trim()) currentHeaders[k]=el.value.trim(); });
+  localStorage.setItem('f16_headers',JSON.stringify(currentHeaders));
+  applyHeaders(); closeHeaderEditor();
+  toast('✅ تم حفظ عناوين الجداول','success');
+};
+window.resetHeaderEdits=function(){
+  if(!confirm('استعادة جميع العناوين الافتراضية؟')) return;
+  currentHeaders={...DEFAULT_HEADERS};
+  localStorage.removeItem('f16_headers');
+  applyHeaders();
+  Object.keys(currentHeaders).forEach(k=>{ const el=document.getElementById('he_'+k); if(el) el.value=currentHeaders[k]; });
+  toast('↺ تمت الاستعادة','info');
+};
+
+// Modal listeners
+document.getElementById('modalOv').addEventListener('click',e=>{if(e.target===e.currentTarget)closeModal();});
+document.getElementById('filesModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeFilesModal();});
+document.getElementById('maintModalOv').addEventListener('click',e=>{if(e.target===e.currentTarget)closeMaintModal();});
+document.getElementById('headerEditorModal').addEventListener('click',e=>{if(e.target===e.currentTarget)closeHeaderEditor();});
+document.getElementById('podModalOv').addEventListener('click',e=>{if(e.target===e.currentTarget)closePodModal();});
+
+loadSavedHeaders();
+
+// ══════════════════════════════════════════════════════════════════
+// POD UPDATE — منطق كامل مع أرشيف محسَّن
+// ══════════════════════════════════════════════════════════════════
+let podRecords = [];
+let podEditId  = null;
+
+// ── حقول POD للمقارنة في الأرشيف ──
+const POD_FIELDS = ['ac','snPod','time','letterCode','snA311','pnA311','snA312','pnA312','snA314','pnA314'];
+const POD_LABELS = {ac:'A/C',snPod:'S/N POD',time:'TIME',letterCode:'LETTER CODE',
+  snA311:'S/N A311',pnA311:'P/N A311',snA312:'S/N A312',pnA312:'P/N A312',
+  snA314:'S/N A314',pnA314:'P/N A314'};
+
+async function savePodStore(){
+  try{
+    await setDoc(doc(DB,'maintenance','pod_records'),{data:podRecords,updatedAt:Date.now()});
+    renderPodUpdateBar();
+  }catch(e){ toast('⚠️ فشل حفظ سجلات POD','error'); }
+}
+
+function calcPodStatus(letterCode){
+  const lc=(letterCode||'').trim().toUpperCase();
+  if(lc.startsWith('C 1')||lc.startsWith('C1')) return {label:'GOOD', cls:'pod-status-good'};
+  if(lc.startsWith('C 2')||lc.startsWith('C2')) return {label:'N/A',  cls:'pod-status-na'};
+  if(lc.startsWith('C 3')||lc.startsWith('C3')) return {label:'BAD',  cls:'pod-status-bad'};
+  return null;
+}
+
+window.autoFillPodStatus=function(){
+  const lc=document.getElementById('pLetterCode').value;
+  const st=calcPodStatus(lc);
+  const inp=document.getElementById('pStatus');
+  if(st){ inp.value=st.label; inp.style.color=st.cls==='pod-status-good'?'var(--green)':st.cls==='pod-status-na'?'var(--yellow)':'var(--red)'; }
+  else  { inp.value=''; inp.style.color=''; }
+};
+
+function renderPodUpdateBar(){
+  try{
+    const meta=JSON.parse(localStorage.getItem('pod_meta')||'{}');
+    const vInp=document.getElementById('podVerifyBy');
+    if(meta.verifyBy) vInp.value=meta.verifyBy;
+    if(meta.updatedAt) document.getElementById('podUpdateDate').textContent=new Date(meta.updatedAt).toLocaleString('ar-SA');
+    const btn=document.getElementById('podVerifyBtn');
+    if(btn) btn.style.display=(ownerOpen||agentOpen)?'inline-flex':'none';
+    vInp.readOnly=!(ownerOpen||agentOpen);
+  }catch(e){}
+}
+
+window.savePodVerify=function(){
+  const val=document.getElementById('podVerifyBy').value.trim();
+  if(!val){ toast('⚠️ أدخل اسم المراجع','error'); return; }
+  const meta={verifyBy:val, updatedAt:Date.now()};
+  localStorage.setItem('pod_meta', JSON.stringify(meta));
+  document.getElementById('podUpdateDate').textContent=new Date(meta.updatedAt).toLocaleString('ar-SA');
+  toast('✅ تم حفظ بيانات المراجع','success');
+};
+
+// ── جمع كل مدخلات الأرشيف من جميع السجلات ──
+function getAllArchiveEntries(filterAC=''){
+  const entries=[];
+  podRecords.forEach(r=>{
+    if(r.history&&r.history.length){
+      r.history.forEach(h=>{
+        entries.push({...h, recordId: r.id});
+      });
+    }
+  });
+  if(filterAC) return entries.filter(e=> e.after?.ac===filterAC || e.before?.ac===filterAC);
+  return entries;
+}
+
+function renderPod(){
+  // أزرار حسب الصلاحية
+  const acts=document.getElementById('podActs');
+  const col=document.getElementById('podActsCol');
+  const archActsCol=document.getElementById('podArchiveActsCol');
+
+  if(ownerOpen||agentOpen){
+    col.classList.remove('hidden');
+    acts.innerHTML=`<button class="btn btn-primary" onclick="openPodModal()">＋ إضافة سجل POD</button>`;
+  } else {
+    col.classList.add('hidden');
+    acts.innerHTML='';
+  }
+
+  // إظهار عمود إجراءات الأرشيف للمالك والوكيل
+  if(ownerOpen||agentOpen){
+    archActsCol.classList.remove('hidden');
+  } else {
+    archActsCol.classList.add('hidden');
+  }
+
+  renderPodUpdateBar();
+
+  const tb=document.getElementById('podBody');
+  if(!podRecords.length){
+    tb.innerHTML=`<tr><td colspan="12"><div class="empty"><div class="empty-icon">🛰️</div>لا توجد سجلات POD</div></td></tr>`;
+  } else {
+    tb.innerHTML=podRecords.map(r=>{
+      const st=calcPodStatus(r.letterCode);
+      const statusHtml=st?`<span class="${st.cls}">${st.label}</span>`:`<span style="color:var(--muted)">—</span>`;
+      return `<tr>
+        <td><span class="maint-ac">${esc(r.ac)}</span></td>
+        <td class="c-code">${esc(r.snPod)}</td>
+        <td style="font-family:'Orbitron',sans-serif;font-size:12px;color:var(--text);">${esc(r.time)}</td>
+        <td>${statusHtml}</td>
+        <td style="font-family:'Orbitron',sans-serif;font-size:11px;color:var(--accent);">${esc(r.letterCode)}</td>
+        <td class="c-code">${esc(r.snA311)}</td>
+        <td class="c-code">${esc(r.pnA311)}</td>
+        <td class="c-code">${esc(r.snA312)}</td>
+        <td class="c-code">${esc(r.pnA312)}</td>
+        <td class="c-code">${esc(r.snA314)}</td>
+        <td class="c-code">${esc(r.pnA314)}</td>
+        <td><div class="acts">
+          ${(ownerOpen||agentOpen)?`<button class="btn-edit" onclick="openPodEdit('${r.id}')">✏️</button>`:''}
+          ${ownerOpen?`<button class="btn-del" onclick="deletePod('${r.id}')">🗑</button>`:''}
+        </div></td>
+      </tr>`;
+    }).join('');
+  }
+
+  // تحديث قائمة الطائرات في فلتر الأرشيف
+  const sel=document.getElementById('podArchiveAC');
+  const cur=sel.value;
+  // جمع كل A/C من السجلات الحالية + الأرشيف
+  const allACs=new Set();
+  podRecords.forEach(r=>{ if(r.ac) allACs.add(r.ac); if(r.history) r.history.forEach(h=>{ if(h.before?.ac) allACs.add(h.before.ac); if(h.after?.ac) allACs.add(h.after.ac); }); });
+  sel.innerHTML='<option value="">— كل الطائرات —</option>';
+  [...allACs].sort().forEach(ac=>{
+    const o=document.createElement('option'); o.value=ac; o.textContent=ac;
+    if(ac===cur) o.selected=true;
+    sel.appendChild(o);
+  });
+
+  renderPodArchive();
+}
+
+// ── عرض الأرشيف كجدول شامل ──
+window.renderPodArchive=function(){
+  const filterAC=document.getElementById('podArchiveAC').value;
+  const entries=getAllArchiveEntries(filterAC);
+  const countEl=document.getElementById('podArchiveTotalCount');
+  countEl.textContent=entries.length+' سجل';
+
+  const tb=document.getElementById('podArchiveBody');
+  if(!entries.length){
+    const cols=(ownerOpen||agentOpen)?6:5;
+    tb.innerHTML=`<tr><td colspan="${cols}"><div class="archive-empty"><div class="archive-empty-icon">📂</div>${filterAC?'لا يوجد أرشيف لهذه الطائرة':'لا يوجد أرشيف بعد'}</div></td></tr>`;
+    return;
+  }
+
+  // ترتيب تنازلي حسب الوقت
+  const sorted=[...entries].sort((a,b)=>(b.ts||0)-(a.ts||0));
+
+  tb.innerHTML=sorted.map((e,i)=>{
+    const ts=e.ts?new Date(e.ts).toLocaleString('ar-SA'):'—';
+    const before=e.before||{};
+    const after=e.after||{};
+    const isAdd=!e.before||Object.keys(e.before).length===0;
+
+    // خلية A/C القديم → الجديد
+    const oldAC=before.ac||'';
+    const newAC=after.ac||'';
+    let acCell='';
+    if(isAdd){
+      acCell=`<span class="ac-same">${esc(newAC)}</span>`;
+    } else if(oldAC!==newAC&&oldAC&&newAC){
+      acCell=`<div class="ac-change-cell"><span class="ac-old">${esc(oldAC)}</span><span class="ac-arrow">→</span><span class="ac-new">${esc(newAC)}</span></div>`;
+    } else {
+      acCell=`<span class="ac-same">${esc(newAC||oldAC)}</span>`;
+    }
+
+    // شارة نوع العملية
+    const opBadge=isAdd
+      ?`<span class="op-badge add">➕ إضافة</span>`
+      :`<span class="op-badge edit">✏️ تعديل</span>`;
+
+    // حقل المراجع
+    const byVal=esc(e.by||e.verifyBy||'—');
+
+    // التغييرات
+    let changesHtml='';
+    if(isAdd){
+      // إضافة جديدة — اعرض القيم الأساسية
+      const keyFields=['snPod','time','letterCode'];
+      changesHtml=`<div class="pod-archive-changes">`+
+        keyFields.filter(k=>after[k]).map(k=>
+          `<div class="pod-change-tag"><span class="field-lbl">${POD_LABELS[k]}:</span> <b class="new-val">${esc(after[k])}</b></div>`
+        ).join('')+
+        `</div>`;
+    } else {
+      const changedFields=POD_FIELDS.filter(k=>before[k]!==after[k]&&k!=='ac');
+      if(!changedFields.length){
+        changesHtml=`<span style="color:var(--muted);font-size:10px;">لا تغييرات في البيانات</span>`;
+      } else {
+        changesHtml=`<div class="pod-archive-changes">`+
+          changedFields.map(k=>
+            `<div class="pod-change-tag">
+              <span class="field-lbl">${POD_LABELS[k]}:</span>
+              <span class="old-val">${esc(before[k]||'—')}</span>
+              <span class="ac-arrow" style="color:var(--muted);font-size:10px;">→</span>
+              <b class="new-val">${esc(after[k]||'—')}</b>
+            </div>`
+          ).join('')+
+          `</div>`;
+      }
+    }
+
+    // زر الحذف من الأرشيف (مالك فقط)
+    const actCell=(ownerOpen||agentOpen)
+      ?`<td><button class="btn-del" style="font-size:10px;padding:4px 8px;" onclick="deleteArchiveEntry('${e.recordId}',${e.ts})">🗑</button></td>`
+      :``;
+
+    return `<tr>
+      <td style="font-family:'Orbitron',sans-serif;font-size:10px;color:var(--muted);white-space:nowrap;">${ts}</td>
+      <td>${acCell}</td>
+      <td>${opBadge}</td>
+      <td style="font-size:11px;color:var(--text);">${byVal}</td>
+      <td>${changesHtml}</td>
+      ${actCell}
+    </tr>`;
+  }).join('');
+};
+
+// ── حذف سجل أرشيف واحد (مالك فقط) ──
+window.deleteArchiveEntry=async function(recordId, ts){
+  if(!ownerOpen){ toast('⚠️ الحذف للمالك فقط','error'); return; }
+  if(!confirm('حذف هذا السجل من الأرشيف؟')) return;
+  const rec=podRecords.find(x=>x.id===recordId);
+  if(!rec){ toast('⚠️ السجل غير موجود','error'); return; }
+  rec.history=(rec.history||[]).filter(h=>h.ts!==ts);
+  await savePodStore();
+  renderPod();
+  toast('🗑 تم حذف السجل من الأرشيف','info');
+};
+
+window.openPodModal=function(){
+  if(!ownerOpen&&!agentOpen){ toast('⚠️ يحتاج صلاحية وكيل أو مالك','error'); return; }
+  podEditId=null;
+  document.getElementById('podModalTitle').textContent='🛰️ إضافة سجل POD';
+  document.getElementById('podSaveBtn').textContent='💾 حفظ السجل';
+  ['pAC','pSNPOD','pTIME','pLetterCode','pStatus','pSNA311','pPNA311','pSNA312','pPNA312','pSNA314','pPNA314'].forEach(id=>{
+    const el=document.getElementById(id); el.value=''; el.style.color='';
+  });
+  document.getElementById('pVerifyBy').value='';
+  document.getElementById('pVerifyErr').style.display='none';
+  document.getElementById('podModalOv').classList.add('open');
+};
+
+window.openPodEdit=function(id){
+  if(!ownerOpen&&!agentOpen){ toast('⚠️ يحتاج صلاحية','error'); return; }
+  const r=podRecords.find(x=>x.id===id); if(!r) return;
+  podEditId=id;
+  document.getElementById('podModalTitle').textContent='✏️ تعديل سجل POD';
+  document.getElementById('podSaveBtn').textContent='💾 حفظ التعديلات';
+  document.getElementById('pAC').value=r.ac||'';
+  document.getElementById('pSNPOD').value=r.snPod||'';
+  document.getElementById('pTIME').value=r.time||'';
+  document.getElementById('pLetterCode').value=r.letterCode||'';
+  document.getElementById('pSNA311').value=r.snA311||'';
+  document.getElementById('pPNA311').value=r.pnA311||'';
+  document.getElementById('pSNA312').value=r.snA312||'';
+  document.getElementById('pPNA312').value=r.pnA312||'';
+  document.getElementById('pSNA314').value=r.snA314||'';
+  document.getElementById('pPNA314').value=r.pnA314||'';
+  autoFillPodStatus();
+  document.getElementById('pVerifyBy').value='';
+  document.getElementById('pVerifyErr').style.display='none';
+  document.getElementById('podModalOv').classList.add('open');
+};
+
+window.closePodModal=()=>{ document.getElementById('podModalOv').classList.remove('open'); podEditId=null; };
+
+window.savePod=async function(){
+  const ac=document.getElementById('pAC').value.trim();
+  const snPod=document.getElementById('pSNPOD').value.trim();
+  if(!ac||!snPod){ toast('⚠️ A/C و S/N POD مطلوبان','error'); return; }
+
+  // اقرأ اسم المراجع من حقل VERIFY BY داخل النافذة (إلزامي — مستقل لكل طائرة)
+  const verifyBy=document.getElementById('pVerifyBy').value.trim();
+  if(!verifyBy){
+    document.getElementById('pVerifyErr').style.display='block';
+    document.getElementById('pVerifyBy').focus();
+    toast('⚠️ أدخل اسم المراجع / المنفذ — إلزامي قبل الحفظ','error');
+    return;
+  }
+  document.getElementById('pVerifyErr').style.display='none';
+
+  const newData={
+    ac, snPod,
+    time:document.getElementById('pTIME').value.trim(),
+    letterCode:document.getElementById('pLetterCode').value.trim(),
+    snA311:document.getElementById('pSNA311').value.trim(),
+    pnA311:document.getElementById('pPNA311').value.trim(),
+    snA312:document.getElementById('pSNA312').value.trim(),
+    pnA312:document.getElementById('pPNA312').value.trim(),
+    snA314:document.getElementById('pSNA314').value.trim(),
+    pnA314:document.getElementById('pPNA314').value.trim(),
+    updatedAt:Date.now()
+  };
+
+  if(podEditId){
+    const idx=podRecords.findIndex(x=>x.id===podEditId);
+    if(idx!==-1){
+      const old=podRecords[idx];
+
+      // ── تحقق من تغيير A/C — سجّل القديم والجديد ──
+      const before={};
+      POD_FIELDS.forEach(k=>{ before[k]=old[k]||''; });
+      const after={};
+      POD_FIELDS.forEach(k=>{ after[k]=newData[k]||''; });
+
+      // فقط سجّل في الأرشيف إذا وجد فرق فعلي
+      const hasChange=POD_FIELDS.some(k=>before[k]!==after[k]);
+
+      const historyEntry={
+        ts:Date.now(),
+        by: verifyBy,
+        before: hasChange?before:{},
+        after
+      };
+
+      const history=[...(old.history||[]),historyEntry];
+      podRecords[idx]={...old,...newData,history};
+    }
+  } else {
+    // إضافة جديدة — سجّل في الأرشيف كإضافة
+    const after={};
+    POD_FIELDS.forEach(k=>{ after[k]=newData[k]||''; });
+    const historyEntry={ts:Date.now(),by:verifyBy,before:{},after};
+    podRecords.push({id:uid(),...newData,history:[historyEntry]});
+  }
+
+  await savePodStore();
+  closePodModal(); renderPod();
+  toast(podEditId?'✅ تم تحديث سجل POD':'✅ تمت إضافة سجل POD','success');
+};
+
+window.deletePod=async function(id){
+  if(!ownerOpen){ toast('⚠️ الحذف للمالك فقط','error'); return; }
+  if(!confirm('حذف هذا السجل نهائياً؟')) return;
+  podRecords=podRecords.filter(x=>x.id!==id);
+  await savePodStore(); renderPod();
+  toast('🗑 تم الحذف','info');
+};
+
+// ══════════════════════════════════
+// PASSWORD MANAGER
+// ══════════════════════════════════
+window.togglePassVis=function(id,btn){
+  const inp=document.getElementById(id);
+  if(inp.type==='password'){ inp.type='text'; btn.textContent='🙈'; }
+  else { inp.type='password'; btn.textContent='👁'; }
+};
+
+(function(){
+  const pairs=[['newAppPass','strengthApp'],['newAgentPass','strengthAgent'],['newOwnerPass','strengthOwner']];
+  function strength(v){
+    if(!v) return 0;
+    let s=0;
+    if(v.length>=4) s++;
+    if(v.length>=8) s++;
+    if(/[A-Z]/.test(v)&&/[a-z0-9]/.test(v)) s++;
+    if(/[0-9]/.test(v)) s++;
+    if(/[^A-Za-z0-9]/.test(v)) s++;
+    return Math.min(s,5);
+  }
+  const cols=['','#ff3366','#ff6b00','#ffd700','#00c8ff','#00ff88'];
+  const wids=['0%','20%','40%','60%','80%','100%'];
+  function attach(){
+    pairs.forEach(([inp,bar])=>{
+      const el=document.getElementById(inp);
+      if(!el) return;
+      el.addEventListener('input',function(){
+        const s=strength(this.value);
+        const b=document.getElementById(bar);
+        b.style.background=this.value?cols[s]:'var(--border)';
+        b.style.width=this.value?wids[s]:'0%';
+      });
+    });
+  }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded',attach);
+  else attach();
+})();
+
+async function _savePasswords(){
+  const {setDoc,doc:fsDoc}=await import('https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js');
+  await setDoc(fsDoc(DB,'app_config','passwords'),{ownerPass:OWNER_PASS,agentPass:AGENT_PASS,appPass:APP_PASS,updatedAt:Date.now()});
+}
+
+window.changeAppPass=async function(){
+  if(!ownerOpen){ toast('⚠️ للمالك فقط','error'); return; }
+  const v=document.getElementById('newAppPass').value.trim();
+  if(!v||v.length<4){ toast('⚠️ 4 أحرف على الأقل','error'); return; }
+  APP_PASS=v.toUpperCase();
+  _entryPass=APP_PASS;
+  document.getElementById('newAppPass').value='';
+  document.getElementById('strengthApp').style.width='0%';
+  try{ await _savePasswords(); toast('✅ تم تغيير كلمة سر التطبيق وحُفِظت','success'); }
+  catch(e){ toast('⚠️ تم التغيير مؤقتاً — تحقق من الاتصال','info'); console.error(e); }
+};
+
+window.changeAgentPass=async function(){
+  if(!ownerOpen){ toast('⚠️ للمالك فقط','error'); return; }
+  const v=document.getElementById('newAgentPass').value.trim();
+  if(!v||v.length<4){ toast('⚠️ 4 أحرف على الأقل','error'); return; }
+  AGENT_PASS=v;
+  document.getElementById('newAgentPass').value='';
+  document.getElementById('strengthAgent').style.width='0%';
+  try{ await _savePasswords(); toast('✅ تم تغيير كلمة سر الوكيل وحُفِظت','success'); }
+  catch(e){ toast('⚠️ تم التغيير مؤقتاً — تحقق من الاتصال','info'); console.error(e); }
+};
+
+window.changeOwnerPass=async function(){
+  if(!ownerOpen){ toast('⚠️ للمالك فقط','error'); return; }
+  const v=document.getElementById('newOwnerPass').value.trim();
+  if(!v||v.length<4){ toast('⚠️ 4 أحرف على الأقل','error'); return; }
+  OWNER_PASS=v;
+  document.getElementById('newOwnerPass').value='';
+  document.getElementById('strengthOwner').style.width='0%';
+  try{ await _savePasswords(); toast('✅ تم تغيير كلمة سر المالك وحُفِظت','success'); }
+  catch(e){ toast('⚠️ تم التغيير مؤقتاً — تحقق من الاتصال','info'); console.error(e); }
+};
+
+window._startApp = startApp;
+</script>
+</body>
+</html>
